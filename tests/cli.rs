@@ -75,6 +75,17 @@ fn emits_multiple_text_results_line_by_line() {
 }
 
 #[test]
+fn empty_text_result_stream_emits_no_output() {
+    let output = run_stdin(
+        &["-q", ".[] | select(. > 10)", "--to", "text"],
+        "[1,2,3]",
+    );
+
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
 fn emits_empty_array_for_empty_structured_result_stream() {
     let output = run_stdin(
         &["-q", ".[] | select(. > 10)", "--to", "json"],
@@ -93,6 +104,34 @@ fn rejects_structured_values_in_text_mode() {
     assert!(String::from_utf8(output.stderr)
         .unwrap()
         .contains("text output requires scalar"));
+}
+
+#[test]
+fn preserves_string_content_in_text_mode() {
+    let output = run_stdin(
+        &["-q", ".message", "--to", "text"],
+        r#"{"message":"hello, world: \"toon\""}"#,
+    );
+
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "hello, world: \"toon\"\n"
+    );
+}
+
+#[test]
+fn reports_missing_input_file() {
+    let output = Command::cargo_bin("toon-world")
+        .unwrap()
+        .arg("/definitely/missing/toon-world-input.json")
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains("error[input]"));
 }
 
 #[test]
