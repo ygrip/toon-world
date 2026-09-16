@@ -1,8 +1,8 @@
 use std::fs::File;
-use std::io::{Read, stdin};
+use std::io::{stdin, Read};
 use std::path::Path;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use jaq_json::Val;
 
 pub fn read_json(path: Option<&Path>) -> Result<Val> {
