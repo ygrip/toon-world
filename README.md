@@ -2,7 +2,7 @@
 
 A fast, lightweight, single-binary query and transformation tool for structured and document data, with compact [TOON](https://github.com/toon-format/spec) output by default.
 
-> **Status:** early implementation
+> **Status:** early implementation. The current branch implements the JSON query core; the other input adapters shown below are roadmap items.
 
 ## Why
 
@@ -22,16 +22,18 @@ TOON ───┘
 
 `toon-world` embeds a jq-compatible query engine rather than inventing another query language. Format-specific helpers such as Markdown `section()` are planned as sugar over the same query model.
 
-## Principles
+## Implemented v0.1 core
 
-1. **Query first** — parse once, query the normalized value, encode only the result.
-2. **Lossless by default** — conversion must not silently drop, regroup, or hoist data.
-3. **Standard TOON first** — extensions are explicit, versioned, benchmarked, and opt-in.
-4. **One executable** — no runtime dependency on jq, Node, Python, or companion binaries.
-5. **stdin/stdout first** — shell and agent pipelines are primary use cases.
-6. **Measure, do not guess** — optimizations need reproducible byte/token/performance evidence.
+- JSON file input
+- JSON stdin input
+- jq-compatible queries through embedded [`jaq`](https://github.com/01mf02/jaq)
+- identity query when `-q` is omitted
+- TOON output by default
+- compact JSON output
+- scalar text output for shell pipelines
+- explicit parse/query/encoding error categories
 
-## CLI direction
+## CLI
 
 Conversion uses the identity query by default:
 
@@ -58,9 +60,28 @@ toon-world package.json -q '.version' --to text
 
 The query is deliberately a flag instead of an ambiguous positional argument: file conversion stays trivial while stdin remains predictable.
 
+When a jq program yields multiple results, structured output collects them into one array; `--to text` writes scalar results one per line.
+
 ## Query engine
 
-The Rust implementation uses [`jaq`](https://github.com/01mf02/jaq) as the embedded jq-compatible engine. `jaq` already provides a mature Rust parser/compiler/interpreter and multi-format foundations, so toon-world does not grow a home-made jq dialect merely for the character-building experience.
+The Rust implementation uses `jaq` as the embedded jq-compatible engine. `jaq` already provides a mature Rust parser/compiler/interpreter and multi-format foundations, so toon-world does not grow a home-made jq dialect merely for the character-building experience.
+
+Query results are normalized at the output boundary before JSON/TOON encoding. Object order and arbitrary-precision JSON numbers are preserved where the JSON model supports them; jaq-only values such as binary strings are rejected rather than silently corrupted.
+
+## TOON compatibility
+
+The current Rust integration uses `toon-format` 0.5.x, whose published documentation declares TOON specification **v3.0** compatibility. The upstream TOON specification has advanced beyond that version, so this early implementation does **not** claim TOON 4.1 conformance yet.
+
+The encoder is isolated behind the output module so it can be upgraded or replaced without changing the query/input architecture.
+
+## Principles
+
+1. **Query first**: parse once, query the normalized value, encode only the result.
+2. **Lossless by default**: conversion must not silently drop, regroup, or hoist data.
+3. **Standard TOON first**: extensions are explicit, versioned, benchmarked, and opt-in.
+4. **One executable**: no runtime dependency on jq, Node, Python, or companion binaries.
+5. **stdin/stdout first**: shell and agent pipelines are primary use cases.
+6. **Measure, do not guess**: optimizations need reproducible byte/token/performance evidence.
 
 ## Document adapters
 
@@ -82,7 +103,7 @@ A separate experiment may encode heterogeneous arrays with an explicit absent-va
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`docs/superpowers/specs/2026-09-16-toon-world-design.md`](docs/superpowers/specs/2026-09-16-toon-world-design.md).
+See [`docs/ROADMAP.md`](docs/ROADMAP.md), the [design](docs/superpowers/specs/2026-09-16-toon-world-design.md), and the [query-core implementation plan](docs/superpowers/plans/2026-09-16-query-core.md).
 
 ## Reference
 
