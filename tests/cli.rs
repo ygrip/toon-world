@@ -1,6 +1,5 @@
 use std::io::Write;
 
-use assert_cmd::Command;
 use tempfile::NamedTempFile;
 
 fn input_file(contents: &str) -> NamedTempFile {
@@ -9,14 +8,14 @@ fn input_file(contents: &str) -> NamedTempFile {
     file
 }
 
+fn command() -> assert_cmd::Command {
+    assert_cmd::cargo::cargo_bin_cmd!("toon-world")
+}
+
 #[test]
 fn converts_json_file_to_toon_by_default() {
     let file = input_file(r#"{"name":"Ada","active":true}"#);
-    let output = Command::cargo_bin("toon-world")
-        .unwrap()
-        .arg(file.path())
-        .output()
-        .unwrap();
+    let output = command().arg(file.path()).output().unwrap();
 
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
@@ -29,8 +28,7 @@ fn queries_and_projects_json() {
     let file = input_file(
         r#"{"users":[{"id":1,"name":"Ada","active":true},{"id":2,"name":"Bob","active":false}]}"#,
     );
-    let output = Command::cargo_bin("toon-world")
-        .unwrap()
+    let output = command()
         .args([
             file.path().to_str().unwrap(),
             "-q",
@@ -42,13 +40,15 @@ fn queries_and_projects_json() {
         .unwrap();
 
     assert!(output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "{\"id\":1,\"name\":\"Ada\"}\n");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "{\"id\":1,\"name\":\"Ada\"}\n"
+    );
 }
 
 #[test]
 fn reads_json_from_stdin() {
-    let mut command = Command::cargo_bin("toon-world").unwrap();
-    let output = command
+    let output = command()
         .args(["-q", ".name", "--to", "text"])
         .write_stdin(r#"{"name":"Ada"}"#)
         .output()
@@ -60,8 +60,7 @@ fn reads_json_from_stdin() {
 
 #[test]
 fn emits_multiple_text_results_line_by_line() {
-    let mut command = Command::cargo_bin("toon-world").unwrap();
-    let output = command
+    let output = command()
         .args(["-q", ".[]", "--to", "text"])
         .write_stdin(r#"["Ada","Bob"]"#)
         .output()
@@ -73,26 +72,28 @@ fn emits_multiple_text_results_line_by_line() {
 
 #[test]
 fn reports_malformed_json() {
-    let mut command = Command::cargo_bin("toon-world").unwrap();
-    let output = command.write_stdin("{").output().unwrap();
+    let output = command().write_stdin("{").output().unwrap();
 
     assert!(!output.status.success());
-    assert!(String::from_utf8(output.stderr)
-        .unwrap()
-        .contains("error[parse:json]"));
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("error[parse:json]")
+    );
 }
 
 #[test]
 fn reports_malformed_query() {
-    let mut command = Command::cargo_bin("toon-world").unwrap();
-    let output = command
+    let output = command()
         .args(["-q", ".[", "--to", "json"])
         .write_stdin("{}")
         .output()
         .unwrap();
 
     assert!(!output.status.success());
-    assert!(String::from_utf8(output.stderr)
-        .unwrap()
-        .contains("error[query]"));
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("error[query]")
+    );
 }
