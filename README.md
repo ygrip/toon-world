@@ -1,134 +1,91 @@
 # toon-world
 
-A fast, lightweight, single-binary transformer that turns structured data into compact, LLM-friendly [TOON](https://github.com/toon-format/spec).
+A fast, lightweight, single-binary query and transformation tool for structured and document data, with compact [TOON](https://github.com/toon-format/spec) output by default.
 
-> **Status:** design / bootstrap
+> **Status:** early implementation
 
 ## Why
 
-TOON is excellent when data already matches its strongest shape: uniform arrays of objects. Real inputs are messier. APIs return irregular JSON, CSV is already tabular, XML carries attributes and repeated elements, and HTML contains far more presentation syntax than useful context.
-
-`toon-world` aims to be the thin normalization layer between those formats and TOON without quietly changing the meaning of the source.
+Converting data to TOON is useful, but conversion alone is not the product. The useful workflow is being able to read different formats through one interface, select only the data an agent or shell pipeline needs, and emit a compact result.
 
 ```text
 JSON ───┐
 YAML ───┤
 TOML ───┤
 CSV ────┤
-NDJSON ─┤──> normalize ──> TOON
-XML ────┤
-HTML ───┘
+NDJSON ─┤
+XML ────┤──> parse / normalize ──> jq-like query ──> TOON / JSON / text
+HTML ───┤
+MD ─────┤
+TOON ───┘
 ```
+
+`toon-world` embeds a jq-compatible query engine rather than inventing another query language. Format-specific helpers such as Markdown `section()` are planned as sugar over the same query model.
 
 ## Principles
 
-1. **Lossless by default**
-   - Preserve the logical value tree and source ordering where the target model supports it.
-   - A default conversion must not silently drop fields, regroup records, or hoist values.
+1. **Query first** — parse once, query the normalized value, encode only the result.
+2. **Lossless by default** — conversion must not silently drop, regroup, or hoist data.
+3. **Standard TOON first** — extensions are explicit, versioned, benchmarked, and opt-in.
+4. **One executable** — no runtime dependency on jq, Node, Python, or companion binaries.
+5. **stdin/stdout first** — shell and agent pipelines are primary use cases.
+6. **Measure, do not guess** — optimizations need reproducible byte/token/performance evidence.
 
-2. **Standard TOON first**
-   - Default output should conform to the current TOON specification.
-   - Any toon-world-only extension must be explicit, versioned, benchmarked, and opt-in.
+## CLI direction
 
-3. **Optimize structure before syntax tricks**
-   - Do not add alias dictionaries or custom metadata unless measured savings justify the complexity.
-   - Prefer the natural TOON representation for the existing data shape.
-
-4. **Streaming where practical**
-   - stdin/stdout should be first-class.
-   - Large inputs should not require multiple full copies in memory.
-
-5. **Measure, do not guess**
-   - Report bytes and, when a tokenizer is selected, estimated token counts.
-   - Experimental encodings should only win when they are actually smaller.
-
-## Initial CLI shape
+Conversion uses the identity query by default:
 
 ```bash
-# auto-detect input, emit standard TOON
-toon-world input.json
-
-toon-world input.yaml
-toon-world input.csv
-cat response.ndjson | toon-world
-
-# explicit formats
-toon-world input.xml --from xml --to toon
-
-# inspect savings
-toon-world input.json --stats
-
-# intentionally semantic / lossy transforms
-toon-world page.html --semantic
+toon-world data.json
+cat data.json | toon-world
 ```
 
-The default path is boring on purpose: parse, normalize, encode. Cleverness belongs behind explicit flags until it has earned the privilege.
+Query using jq syntax:
 
-## Format direction
+```bash
+toon-world data.json -q '.users[] | select(.active == true)'
+toon-world data.json -q '.users[] | {id,name}'
+cat response.json | toon-world -q '.repositories[] | {name,url}'
+```
 
-### JSON / YAML / TOML / NDJSON
+Choose output:
 
-Normalize into the JSON-compatible value model, then encode as standard TOON.
+```bash
+toon-world data.json -q '.users' --to toon
+toon-world data.json -q '.users' --to json
+toon-world package.json -q '.version' --to text
+```
 
-### CSV
+The query is deliberately a flag instead of an ambiguous positional argument: file conversion stays trivial while stdin remains predictable.
 
-Map the header to a TOON tabular field list and rows to TOON rows. CSV is already close to TOON's ideal shape.
+## Query engine
 
-### XML
+The Rust implementation uses [`jaq`](https://github.com/01mf02/jaq) as the embedded jq-compatible engine. `jaq` already provides a mature Rust parser/compiler/interpreter and multi-format foundations, so toon-world does not grow a home-made jq dialect merely for the character-building experience.
 
-Provide two eventual modes:
+## Document adapters
 
-- **structural**: preserve elements, attributes, repeated nodes, and mixed content faithfully enough to reconstruct the logical XML tree.
-- **semantic**: intentionally collapse XML ceremony when exact reconstruction is not required.
+Markdown and HTML are document-shaped rather than plain data formats. They will expose predictable normalized trees and later semantic helpers.
 
-### HTML
+Examples of planned helpers:
 
-Treat HTML separately from generic XML:
+```bash
+toon-world README.md -q 'section("Installation")'
+toon-world README.md -q 'section("Usage") | code("bash")'
+toon-world page.html -q 'links()'
+```
 
-- default structural conversion preserves meaningful DOM structure;
-- `--semantic` extracts useful document content such as headings, text, links, lists, tables, and form metadata while dropping presentation noise.
+Helpers compile to the common query engine; they are not a second query language.
 
 ## Sparse heterogeneous tables
 
-A promising experiment is allowing heterogeneous object arrays to use a sparse tabular representation.
-
-Input:
-
-```json
-[
-  {"type":"github","repo":"punakawan","pr":34},
-  {"type":"jira","key":"ABC-1"},
-  {"type":"github","repo":"mom","pr":12}
-]
-```
-
-Standard TOON uses list form because the objects do not share one field set.
-
-A toon-world extension could experimentally encode the union of fields and use an explicit **absent** sentinel distinct from JSON `null` and the empty string:
-
-```text
-[3]{type,repo,pr,key}:
-  github,punakawan,34,~
-  jira,~,~,ABC-1
-  github,mom,12,~
-```
-
-This is **not standard TOON today** and therefore must not be emitted by the default encoder. It is a research direction to benchmark against standard list form before any format commitment.
-
-## Non-goals for the first release
-
-- inventing a replacement for TOON;
-- numeric key aliases;
-- schema inference systems;
-- lossy field filtering by default;
-- preserving byte-identical source formatting;
-- turning every source format into one giant AST in memory.
+A separate experiment may encode heterogeneous arrays with an explicit absent-value sentinel while preserving row order and the distinction between absent, `null`, and empty string. It is not standard TOON and will not be emitted by default.
 
 ## Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the phased plan and [`docs/superpowers/specs/2026-09-16-toon-world-design.md`](docs/superpowers/specs/2026-09-16-toon-world-design.md) for the initial design.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`docs/superpowers/specs/2026-09-16-toon-world-design.md`](docs/superpowers/specs/2026-09-16-toon-world-design.md).
 
 ## Reference
 
 - [TOON specification](https://github.com/toon-format/spec)
 - [TOON reference implementation](https://github.com/toon-format/toon)
+- [jaq](https://github.com/01mf02/jaq)
