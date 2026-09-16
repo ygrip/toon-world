@@ -2,11 +2,11 @@
 
 A fast, lightweight, single-binary query and transformation tool for structured and document data, with compact [TOON](https://github.com/toon-format/spec) output by default.
 
-> **Status:** early implementation. The current branch implements the JSON query core; the other input adapters shown below are roadmap items.
+> **Status:** early implementation. The current milestone implements the JSON query core; additional input adapters are delivered in later milestone PRs.
 
 ## Why
 
-Converting data to TOON is useful, but conversion alone is not the product. The useful workflow is being able to read different formats through one interface, select only the data an agent or shell pipeline needs, and emit a compact result.
+Conversion alone is not the product. `toon-world` exists so structured and document formats can be read through one interface, filtered before they enter an agent's context, and emitted in a compact representation.
 
 ```text
 JSON ───┐
@@ -14,35 +14,35 @@ YAML ───┤
 TOML ───┤
 CSV ────┤
 NDJSON ─┤
-XML ────┤──> parse / normalize ──> jq-like query ──> TOON / JSON / text
+XML ────┤──> adapter ──> normalized value ──> jq-compatible query ──> TOON / JSON / text
 HTML ───┤
 MD ─────┤
 TOON ───┘
 ```
 
-`toon-world` embeds a jq-compatible query engine rather than inventing another query language. Format-specific helpers such as Markdown `section()` are planned as sugar over the same query model.
+`toon-world` embeds [`jaq`](https://github.com/01mf02/jaq) rather than inventing another query language. Format-specific helpers such as Markdown `section()` are sugar over the same query model.
 
-## Implemented v0.1 core
+## Implemented in the 0.1 milestone
 
 - JSON file input
 - JSON stdin input
-- jq-compatible queries through embedded [`jaq`](https://github.com/01mf02/jaq)
+- jq-compatible queries through embedded `jaq`
 - identity query when `-q` is omitted
 - TOON output by default
 - compact JSON output
 - scalar text output for shell pipelines
-- explicit parse/query/encoding error categories
+- explicit input / parse / query / encoding error categories
 
 ## CLI
 
-Conversion uses the identity query by default:
+Convert using the identity query:
 
 ```bash
 toon-world data.json
 cat data.json | toon-world
 ```
 
-Query using jq syntax:
+Filter or project using jq syntax:
 
 ```bash
 toon-world data.json -q '.users[] | select(.active == true)'
@@ -58,19 +58,17 @@ toon-world data.json -q '.users' --to json
 toon-world package.json -q '.version' --to text
 ```
 
-The query is deliberately a flag instead of an ambiguous positional argument: file conversion stays trivial while stdin remains predictable.
-
-When a jq program yields multiple results, structured output collects them into one array; `--to text` writes scalar results one per line.
+When a jq program yields multiple results, structured output collects them into one array. `--to text` writes scalar results one per line and rejects arrays/objects so shell pipelines do not receive ambiguous serialization.
 
 ## Query engine
 
-The Rust implementation uses `jaq` as the embedded jq-compatible engine. `jaq` already provides a mature Rust parser/compiler/interpreter and multi-format foundations, so toon-world does not grow a home-made jq dialect merely for the character-building experience.
+The Rust implementation uses `jaq` as the embedded jq-compatible engine. Parsing, querying, and output encoding are isolated so future adapters do not need their own query implementation.
 
 Query results are normalized at the output boundary before JSON/TOON encoding. Object order and arbitrary-precision JSON numbers are preserved where the JSON model supports them; jaq-only values such as binary strings are rejected rather than silently corrupted.
 
 ## TOON compatibility
 
-The current Rust integration uses `toon-format` 0.5.x, whose published documentation declares TOON specification **v3.0** compatibility. The upstream TOON specification has advanced beyond that version, so this early implementation does **not** claim TOON 4.1 conformance yet.
+The current Rust integration uses `toon-format` 0.5.x, whose published documentation declares TOON specification **v3.0** compatibility. The upstream TOON specification has advanced beyond that version, so this early implementation does **not** claim newer-spec conformance yet.
 
 The encoder is isolated behind the output module so it can be upgraded or replaced without changing the query/input architecture.
 
@@ -83,23 +81,28 @@ The encoder is isolated behind the output module so it can be upgraded or replac
 5. **stdin/stdout first**: shell and agent pipelines are primary use cases.
 6. **Measure, do not guess**: optimizations need reproducible byte/token/performance evidence.
 
-## Document adapters
+## Verification
 
-Markdown and HTML are document-shaped rather than plain data formats. They will expose predictable normalized trees and later semantic helpers.
-
-Examples of planned helpers:
+CI is intentionally disabled during the initial implementation milestones. Validate locally:
 
 ```bash
-toon-world README.md -q 'section("Installation")'
-toon-world README.md -q 'section("Usage") | code("bash")'
-toon-world page.html -q 'links()'
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
+cargo build --release
 ```
 
-Helpers compile to the common query engine; they are not a second query language.
+Useful smoke checks:
 
-## Sparse heterogeneous tables
+```bash
+printf '%s' '{"users":[{"id":1,"name":"Ada","active":true},{"id":2,"name":"Bob","active":false}]}' \
+  | cargo run --quiet -- -q '.users[] | select(.active) | {id,name}' --to json
+# {"id":1,"name":"Ada"}
 
-A separate experiment may encode heterogeneous arrays with an explicit absent-value sentinel while preserving row order and the distinction between absent, `null`, and empty string. It is not standard TOON and will not be emitted by default.
+printf '%s' '{"version":"0.1.0"}' \
+  | cargo run --quiet -- -q '.version' --to text
+# 0.1.0
+```
 
 ## Roadmap
 
