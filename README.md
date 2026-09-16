@@ -2,11 +2,19 @@
 
 A fast, lightweight, single-binary query and transformation tool for structured and document data, with compact [TOON](https://github.com/toon-format/spec) output by default.
 
-> **Status:** early implementation. The current milestone implements the JSON query core; additional input adapters are delivered in later milestone PRs.
+> **Milestone 0.1:** JSON query core. This branch intentionally contains only the execution spine; additional input adapters are separate stacked PRs.
 
 ## Why
 
-Conversion alone is not the product. `toon-world` exists so structured and document formats can be read through one interface, filtered before they enter an agent's context, and emitted in a compact representation.
+Conversion alone is not the product. `toon-world` exists so data can be filtered before it enters an agent's context, using one jq-compatible query layer and a compact default output.
+
+Milestone 0.1 implements:
+
+```text
+JSON file/stdin -> jaq value -> jq-compatible query -> TOON / JSON / text
+```
+
+The planned full architecture is:
 
 ```text
 JSON ───┐
@@ -20,18 +28,20 @@ MD ─────┤
 TOON ───┘
 ```
 
-`toon-world` embeds [`jaq`](https://github.com/01mf02/jaq) rather than inventing another query language. Format-specific helpers such as Markdown `section()` are sugar over the same query model.
+`toon-world` embeds [`jaq`](https://github.com/01mf02/jaq) rather than inventing another query language.
 
-## Implemented in the 0.1 milestone
+## Implemented in 0.1
 
 - JSON file input
-- JSON stdin input
+- JSON stdin input, implicit or explicit `-`
 - jq-compatible queries through embedded `jaq`
 - identity query when `-q` is omitted
 - TOON output by default
-- compact JSON output
-- scalar text output for shell pipelines
+- compact JSON output via `--to json`
+- scalar text output via `--to text`
+- multiple query results collected for structured output
 - explicit input / parse / query / encoding error categories
+- preservation of object order and arbitrary-precision JSON numbers at the serialization boundary
 
 ## CLI
 
@@ -58,19 +68,24 @@ toon-world data.json -q '.users' --to json
 toon-world package.json -q '.version' --to text
 ```
 
-When a jq program yields multiple results, structured output collects them into one array. `--to text` writes scalar results one per line and rejects arrays/objects so shell pipelines do not receive ambiguous serialization.
+Structured output collects multiple jq results into one array. `--to text` emits scalar results one per line and rejects arrays/objects so shell output is not ambiguously serialized.
 
-## Query engine
+## Query and output contracts
 
-The Rust implementation uses `jaq` as the embedded jq-compatible engine. Parsing, querying, and output encoding are isolated so future adapters do not need their own query implementation.
-
-Query results are normalized at the output boundary before JSON/TOON encoding. Object order and arbitrary-precision JSON numbers are preserved where the JSON model supports them; jaq-only values such as binary strings are rejected rather than silently corrupted.
+- `.` is the default query.
+- Zero structured query results encode as `[]`.
+- Zero text query results emit no bytes.
+- A single structured result remains that value rather than being wrapped in an array.
+- Multiple structured results preserve query order inside one array.
+- JSON output is compact.
+- TOON output is decoded in tests to verify semantic round-trip rather than punctuation.
+- Text output accepts null, booleans, numbers, and strings; arrays/objects are rejected.
 
 ## TOON compatibility
 
-The current Rust integration uses `toon-format` 0.5.x, whose published documentation declares TOON specification **v3.0** compatibility. The upstream TOON specification has advanced beyond that version, so this early implementation does **not** claim newer-spec conformance yet.
+The current Rust integration uses `toon-format` 0.5.x, whose published documentation declares TOON specification **v3.0** compatibility. This milestone does **not** claim compatibility with newer TOON spec revisions.
 
-The encoder is isolated behind the output module so it can be upgraded or replaced without changing the query/input architecture.
+The encoder is isolated behind `output` so a future TOON implementation upgrade does not disturb input/query architecture.
 
 ## Principles
 
@@ -81,9 +96,13 @@ The encoder is isolated behind the output module so it can be upgraded or replac
 5. **stdin/stdout first**: shell and agent pipelines are primary use cases.
 6. **Measure, do not guess**: optimizations need reproducible byte/token/performance evidence.
 
-## Verification
+## Testing and local verification
 
-CI is intentionally disabled during the initial implementation milestones. Validate locally:
+CI is intentionally disabled during the initial milestone chain. The test suite focuses on behavior boundaries and silent-data-loss risks, including query failures, empty streams, nested/escaped TOON values, large integers, CLI argument defaults, file/stdin routing, and null-vs-empty-string behavior.
+
+See [`docs/TESTING.md`](docs/TESTING.md) for the coverage matrix and test policy.
+
+Run locally:
 
 ```bash
 cargo fmt --check
@@ -92,7 +111,7 @@ cargo test --all-features
 cargo build --release
 ```
 
-Useful smoke checks:
+Smoke checks:
 
 ```bash
 printf '%s' '{"users":[{"id":1,"name":"Ada","active":true},{"id":2,"name":"Bob","active":false}]}' \
@@ -104,9 +123,13 @@ printf '%s' '{"version":"0.1.0"}' \
 # 0.1.0
 ```
 
-## Roadmap
+## Project docs
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md), the [design](docs/superpowers/specs/2026-09-16-toon-world-design.md), and the [query-core implementation plan](docs/superpowers/plans/2026-09-16-query-core.md).
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): planned milestone sequence
+- [`docs/MILESTONES.md`](docs/MILESTONES.md): stacked PR contract and status
+- [`docs/TESTING.md`](docs/TESTING.md): verification policy and coverage matrix
+- [`docs/superpowers/specs/2026-09-16-toon-world-design.md`](docs/superpowers/specs/2026-09-16-toon-world-design.md): architecture/design
+- [`docs/superpowers/plans/2026-09-16-query-core.md`](docs/superpowers/plans/2026-09-16-query-core.md): 0.1 implementation plan
 
 ## Reference
 
