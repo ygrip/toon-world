@@ -55,7 +55,7 @@ fn text_output_emits_scalar_results_line_by_line() {
 
 #[test]
 fn text_output_keeps_empty_string_distinct_from_null() {
-    let values = vec![value(r#"""#), value("null")];
+    let values = vec![value("\"\""), value("null")];
     let rendered = output::encode_results(&values, OutputFormat::Text).unwrap();
 
     assert_eq!(rendered, "\nnull");
