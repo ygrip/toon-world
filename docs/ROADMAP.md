@@ -1,97 +1,55 @@
 # toon-world roadmap
 
-`toon-world` is a universal query/transform bridge whose default structured output is TOON. Conversion exists so data from different formats can be filtered through one jq-compatible interface before it reaches an agent or another shell command.
+`toon-world` is a universal query/transform bridge whose default structured output is TOON. The goal is one fast executable that can parse different formats, query only the needed data, and emit compact context.
 
-## Phase 0 — baseline and measurement
+## 0.1 — query core
 
-- Pin Rust/MSRV and dependency versions.
-- Define the normalized value contract.
-- Establish fixtures for uniform, heterogeneous, nested, and scalar data.
-- Measure startup time, throughput, output bytes, and peak memory.
-- Track TOON spec/version support explicitly.
+Status: implemented on this branch, local verification required.
 
-## Phase 1 — JSON + jq-compatible query core
+- Rust single binary
+- JSON file/stdin input
+- embedded jaq query engine
+- identity query by default
+- TOON / compact JSON / scalar text output
+- deterministic error categories
+- high-value query/output/CLI tests
 
-Goal: the first genuinely useful binary.
+## 0.2 — structured adapters
 
-```bash
-toon-world data.json
-toon-world data.json -q '.users[] | select(.active)'
-cat data.json | toon-world -q '.users[] | {id,name}'
-toon-world package.json -q '.version' --to text
-```
+Planned as a separate stacked PR:
 
-Deliver:
+- NDJSON / JSONL
+- CSV
+- YAML
+- TOML
+- structural XML
 
-- Rust single binary;
-- file or stdin input;
-- JSON input;
-- embedded `jaq` query compilation/execution;
-- identity query when `-q` is omitted;
-- TOON default output;
-- JSON and text output;
-- deterministic errors and exit codes;
-- integration tests for conversion, selection, filtering, projection, scalar output, stdin, and malformed filters.
+The adapter boundary must remain independent from the query engine.
 
-## Phase 2 — structured format adapters
+## 0.3 — TOON input
 
-Reuse jaq's existing format ecosystem where its mapping contracts fit toon-world:
+Add TOON decoding as first-class input, with the compatibility claim pinned to the TOON version actually supported by the selected Rust implementation.
 
-1. NDJSON
-2. CSV
-3. YAML
-4. TOML
-5. XML
+## 0.4 — Markdown
 
-The adapter boundary must remain independent from the query engine. Query expressions operate on normalized values, not source syntax.
+Normalize Markdown into a retrieval-oriented document model with ordered sections, typed blocks, frontmatter, links, and jaq helpers such as `section()` and `code()`.
 
-## Phase 3 — TOON input
+## 0.5 — HTML
 
-Add TOON decoding as a first-class input once the selected Rust implementation is compatible with the TOON specification version toon-world claims to support. Do not silently claim current-spec conformance while embedding an older implementation.
+Support two explicit contracts:
 
-## Phase 4 — Markdown and HTML
+- structural DOM model by default;
+- content-oriented `--semantic` mode for agents.
 
-Document formats get explicit normalized schemas rather than being treated as awkward JSON.
+## 0.6 — measurement
 
-### Markdown
+Add `--stats` for raw input bytes, rendered output bytes, absolute delta, and percentage reduction/increase. Tokenizer-specific estimates can remain optional future work if they would burden the default binary.
 
-Expose headings, sections, paragraphs, lists, links, code blocks, tables, and frontmatter. Structural mode preserves document semantics; semantic mode may collapse formatting noise.
+Do not add `--keep`, `--drop`, or `--drop-null` as parallel interfaces for operations jq already expresses.
 
-Planned query sugar:
+## Experimental — sparse heterogeneous tables
 
-```bash
-toon-world README.md -q 'section("Installation")'
-toon-world README.md -q 'section("Usage") | code("bash")'
-```
-
-### HTML
-
-Expose meaningful document content such as title, headings, sections, links, lists, tables, forms, and image alt text. Semantic mode may remove scripts, styles, tracking attributes, hydration payloads, and layout-only wrappers.
-
-```bash
-toon-world page.html -q 'links()'
-```
-
-Document helpers compile into the same query engine; there is no second DSL.
-
-## Phase 5 — context-oriented controls
-
-Potential explicit transforms:
-
-```bash
---keep <selector>
---drop <selector>
---drop-null
---semantic
---stats
---tokenizer <name>
-```
-
-These remain opt-in when they can change information content.
-
-## Phase 6 — sparse heterogeneous table experiment
-
-Research a reversible extension for arrays whose objects have overlapping but non-identical fields:
+Research a reversible extension for overlapping object shapes:
 
 ```text
 [3]{type,repo,pr,key}:
@@ -107,16 +65,17 @@ Candidate semantics:
 - `""` = empty string;
 - row order preserved.
 
-The extension must beat standard TOON on representative byte/token benchmarks and preserve model comprehension before it earns a stable format commitment.
+Only stabilize this if representative benchmarks prove material context savings and reliable decoding/comprehension.
 
 ## Release shape
 
-- `0.1`: JSON + jq-compatible queries + TOON/JSON/text output
-- `0.2`: NDJSON/CSV/YAML/TOML/XML adapters
-- `0.3`: TOON input with explicitly pinned spec compatibility
-- `0.4`: Markdown structural adapter + section/code helpers
-- `0.5`: HTML structural/semantic adapter + document helpers
-- `0.x-experimental`: sparse heterogeneous table mode
-- `1.0`: stable CLI, documented format contracts, reproducible performance/token benchmarks
+- `0.1`: JSON query core
+- `0.2`: structured adapters
+- `0.3`: TOON input
+- `0.4`: Markdown
+- `0.5`: HTML
+- `0.6`: byte-size stats
+- `0.x-experimental`: sparse tables
+- `1.0`: stable CLI + documented contracts + reproducible benchmarks
 
-The version numbers are milestones, not promises. The tool should remain small enough that an agent can invoke it casually without summoning an ecosystem.
+See [`MILESTONES.md`](MILESTONES.md) for the stacked PR chain and [`TESTING.md`](TESTING.md) for verification/coverage policy.
