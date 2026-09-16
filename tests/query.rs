@@ -6,6 +6,14 @@ fn json(input: &str) -> Val {
 }
 
 #[test]
+fn identity_returns_input() {
+    let input = json(r#"{"name":"Ada","active":true}"#);
+    let values = query::execute(".", input.clone()).unwrap();
+
+    assert_eq!(values, vec![input]);
+}
+
+#[test]
 fn selects_a_field() {
     let values = query::execute(".name", json(r#"{"name":"Ada","age":36}"#)).unwrap();
 
@@ -22,7 +30,7 @@ fn filters_array_items() {
     .unwrap();
 
     assert_eq!(values.len(), 1);
-    assert!(values[0].to_string().contains("Ada"));
+    assert_eq!(values[0].to_string(), r#"{"name":"Ada","active":true}"#);
 }
 
 #[test]
@@ -38,12 +46,29 @@ fn projects_object_fields() {
 }
 
 #[test]
-fn preserves_multiple_results() {
+fn preserves_multiple_results_in_order() {
     let values = query::execute(".[]", json("[1,2,3]")).unwrap();
 
     assert_eq!(values.len(), 3);
     assert_eq!(values[0].to_string(), "1");
+    assert_eq!(values[1].to_string(), "2");
     assert_eq!(values[2].to_string(), "3");
+}
+
+#[test]
+fn supports_empty_result_stream() {
+    let values = query::execute(".[] | select(. > 10)", json("[1,2,3]")).unwrap();
+
+    assert!(values.is_empty());
+}
+
+#[test]
+fn preserves_null_and_empty_string_as_distinct_values() {
+    let values = query::execute(".[]", json(r#"[null,""]"#)).unwrap();
+
+    assert_eq!(values.len(), 2);
+    assert_eq!(values[0].to_string(), "null");
+    assert_eq!(values[1].to_string(), r#"""#);
 }
 
 #[test]
@@ -53,4 +78,14 @@ fn rejects_malformed_query() {
         .to_string();
 
     assert!(error.contains("error[query]"));
+}
+
+#[test]
+fn reports_runtime_query_errors() {
+    let error = query::execute(".missing[]", json("{}"))
+        .expect_err("iterating null must fail")
+        .to_string();
+
+    assert!(error.contains("error[query]"));
+    assert!(error.contains("runtime"));
 }
