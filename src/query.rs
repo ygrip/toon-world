@@ -1,6 +1,6 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use jaq_core::load::{Arena, File, Loader};
-use jaq_core::{Ctx, Vars, data, unwrap_valr};
+use jaq_core::{data, unwrap_valr, Ctx, Vars};
 use jaq_json::Val;
 
 pub fn execute(query: &str, input: Val) -> Result<Vec<Val>> {
