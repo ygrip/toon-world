@@ -68,7 +68,7 @@ fn preserves_null_and_empty_string_as_distinct_values() {
 
     assert_eq!(values.len(), 2);
     assert_eq!(values[0].to_string(), "null");
-    assert_eq!(values[1].to_string(), r#"""#);
+    assert_eq!(values[1].to_string(), "\"\"");
 }
 
 #[test]
