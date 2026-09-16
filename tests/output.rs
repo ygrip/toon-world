@@ -21,6 +21,24 @@ fn toon_output_round_trips_uniform_data() {
 }
 
 #[test]
+fn toon_output_round_trips_nested_and_escaped_values() {
+    let input = value(
+        r#"{"name":"toon, world","nested":{"quote":"say \"hi\"","empty":"","none":null},"items":[1,true,"x"]}"#,
+    );
+    let rendered = output::encode_results(&[input], OutputFormat::Toon).unwrap();
+    let decoded: serde_json::Value = toon_format::decode_default(&rendered).unwrap();
+
+    assert_eq!(
+        decoded,
+        json!({
+            "name": "toon, world",
+            "nested": {"quote": "say \"hi\"", "empty": "", "none": null},
+            "items": [1, true, "x"]
+        })
+    );
+}
+
+#[test]
 fn json_output_is_compact_and_preserves_key_order() {
     let input = value(r#"{"name":"Ada","active":true}"#);
     let rendered = output::encode_results(&[input], OutputFormat::Json).unwrap();
@@ -29,10 +47,22 @@ fn json_output_is_compact_and_preserves_key_order() {
 }
 
 #[test]
-fn structured_output_collects_multiple_query_results() {
-    let rendered = output::encode_results(&[value("1"), value("2")], OutputFormat::Json).unwrap();
+fn json_output_preserves_large_integer_text() {
+    let input = value(r#"{"id":123456789012345678901234567890}"#);
+    let rendered = output::encode_results(&[input], OutputFormat::Json).unwrap();
 
-    assert_eq!(rendered, "[1,2]");
+    assert_eq!(rendered, r#"{"id":123456789012345678901234567890}"#);
+}
+
+#[test]
+fn structured_output_collects_multiple_query_results_in_order() {
+    let rendered = output::encode_results(
+        &[value(r#""first""#), value(r#""second""#), value(r#""third""#)],
+        OutputFormat::Json,
+    )
+    .unwrap();
+
+    assert_eq!(rendered, r#"["first","second","third"]"#);
 }
 
 #[test]
@@ -59,6 +89,13 @@ fn text_output_keeps_empty_string_distinct_from_null() {
     let rendered = output::encode_results(&values, OutputFormat::Text).unwrap();
 
     assert_eq!(rendered, "\nnull");
+}
+
+#[test]
+fn text_output_of_empty_result_stream_is_empty() {
+    let rendered = output::encode_results(&[], OutputFormat::Text).unwrap();
+
+    assert!(rendered.is_empty());
 }
 
 #[test]
