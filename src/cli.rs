@@ -17,7 +17,20 @@ pub enum OutputFormat {
 )]
 pub struct Args {
     /// Input file. Reads stdin when omitted or when FILE is '-'.
+    #[arg(conflicts_with = "data")]
     pub file: Option<PathBuf>,
+
+    /// Raw input data. Mutually exclusive with FILE.
+    #[arg(long, conflicts_with = "file")]
+    pub data: Option<String>,
+
+    /// Suppress non-fatal warnings.
+    #[arg(long, conflicts_with = "warnings_as_errors")]
+    pub quiet: bool,
+
+    /// Treat any warning as an error and exit non-zero.
+    #[arg(long, conflicts_with = "quiet")]
+    pub warnings_as_errors: bool,
 
     /// jq-compatible query. Defaults to the identity filter.
     #[arg(short = 'q', long, default_value = ".")]
