@@ -11,7 +11,7 @@ Conversion alone is not the product. `toon-world` exists so data can be filtered
 Milestone 0.1 implements:
 
 ```text
-JSON file/stdin -> jaq value -> jq-compatible query -> TOON / JSON / text
+JSON file / stdin / --data -> jaq value -> jq-compatible query -> TOON / JSON / text
 ```
 
 The planned full architecture is:
@@ -34,6 +34,8 @@ TOON ───┘
 
 - JSON file input
 - JSON stdin input, implicit or explicit `-`
+- raw JSON input via `--data`
+- `FILE` and `--data` are mutually exclusive
 - jq-compatible queries through embedded `jaq`
 - identity query when `-q` is omitted
 - TOON output by default
@@ -41,7 +43,29 @@ TOON ───┘
 - scalar text output via `--to text`
 - multiple query results collected for structured output
 - explicit input / parse / query / encoding error categories
+- reusable warning diagnostics with `warning[category]: ...`
+- `--quiet` to suppress warnings
+- `--warnings-as-errors` to fail on warnings
+- warning output is stderr-only and never contaminates stdout data
 - preservation of object order and arbitrary-precision JSON numbers at the serialization boundary
+
+## Input modes
+
+Exactly one source is used:
+
+```bash
+# file
+toon-world data.json
+
+# stdin
+cat data.json | toon-world
+printf '%s' '{"name":"Ada"}' | toon-world
+
+# raw argument
+toon-world --data '{"name":"Ada","active":true}'
+```
+
+`FILE` and `--data` cannot be combined. Raw data is parsed directly from the argument; toon-world does not create a temporary file.
 
 ## CLI
 
@@ -50,6 +74,7 @@ Convert using the identity query:
 ```bash
 toon-world data.json
 cat data.json | toon-world
+toon-world --data '{"name":"Ada"}'
 ```
 
 Filter or project using jq syntax:
@@ -57,7 +82,7 @@ Filter or project using jq syntax:
 ```bash
 toon-world data.json -q '.users[] | select(.active == true)'
 toon-world data.json -q '.users[] | {id,name}'
-cat response.json | toon-world -q '.repositories[] | {name,url}'
+toon-world --data '{"users":[{"id":1,"active":true}]}' -q '.users[] | select(.active)'
 ```
 
 Choose output:
@@ -69,6 +94,35 @@ toon-world package.json -q '.version' --to text
 ```
 
 Structured output collects multiple jq results into one array. `--to text` emits scalar results one per line and rejects arrays/objects so shell output is not ambiguously serialized.
+
+## Warnings and errors
+
+Diagnostics are intentionally separate from data output:
+
+```text
+stdout -> result data only
+stderr -> warnings and errors only
+```
+
+Errors use stable categories such as:
+
+```text
+error[input]: ...
+error[parse:json]: ...
+error[query]: ...
+error[encode:toon]: ...
+```
+
+Warnings use:
+
+```text
+warning[input]: ...
+warning[format]: ...
+```
+
+Use `--quiet` to suppress warnings or `--warnings-as-errors` to turn any warning into a non-zero failure. Those two flags are mutually exclusive.
+
+Milestone 0.1 provides the warning infrastructure. Later adapters introduce concrete warning sources such as unknown-extension fallback.
 
 ## Query and output contracts
 
@@ -98,7 +152,7 @@ The encoder is isolated behind `output` so a future TOON implementation upgrade 
 
 ## Testing and local verification
 
-CI is intentionally disabled during the initial milestone chain. The test suite focuses on behavior boundaries and silent-data-loss risks, including query failures, empty streams, nested/escaped TOON values, large integers, CLI argument defaults, file/stdin routing, and null-vs-empty-string behavior.
+CI is intentionally disabled during the initial milestone chain. The test suite focuses on behavior boundaries and silent-data-loss risks, including raw data/file conflicts, warning policy, query failures, empty streams, nested/escaped TOON values, large integers, CLI argument defaults, file/stdin routing, and null-vs-empty-string behavior.
 
 See [`docs/TESTING.md`](docs/TESTING.md) for the coverage matrix and test policy.
 
@@ -114,8 +168,8 @@ cargo build --release
 Smoke checks:
 
 ```bash
-printf '%s' '{"users":[{"id":1,"name":"Ada","active":true},{"id":2,"name":"Bob","active":false}]}' \
-  | cargo run --quiet -- -q '.users[] | select(.active) | {id,name}' --to json
+cargo run --quiet -- --data '{"users":[{"id":1,"name":"Ada","active":true},{"id":2,"name":"Bob","active":false}]}' \
+  -q '.users[] | select(.active) | {id,name}' --to json
 # {"id":1,"name":"Ada"}
 
 printf '%s' '{"version":"0.1.0"}' \
