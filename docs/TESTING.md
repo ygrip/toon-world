@@ -25,6 +25,7 @@ Small tests call public modules directly and validate one contract at a time:
 
 - query execution and error categorization;
 - output normalization and serialization;
+- warning rendering/suppression/escalation;
 - input adapter normalization in later milestones;
 - document helpers and semantic models in later milestones.
 
@@ -35,8 +36,11 @@ These tests should assert semantic values, not incidental formatting, unless for
 CLI tests cover the boundaries that module tests cannot:
 
 - argument defaults and validation;
-- file vs stdin routing;
+- file vs stdin vs raw `--data` routing;
+- mutually exclusive input modes;
+- warning-policy flag conflicts;
 - exit status and stderr category;
+- stdout/stderr separation;
 - stdout newline behavior;
 - end-to-end query/output composition.
 
@@ -65,9 +69,17 @@ Do not assert serializer punctuation when decoding can prove the stronger proper
 | file input | yes |
 | implicit stdin | yes |
 | explicit `-` stdin | yes |
+| raw `--data` input | yes |
+| `FILE` + `--data` conflict | yes |
+| malformed raw JSON error category | yes |
 | missing file error category | yes |
 | malformed JSON error category | yes |
 | CLI defaults and enum validation | yes |
+| `--quiet` / `--warnings-as-errors` conflict | yes |
+| warning category rendering | yes |
+| warning suppression | yes |
+| warning escalation | yes |
+| no-warning behavior | yes |
 | TOON default output | yes |
 | TOON semantic round-trip | yes |
 | nested/escaped TOON values | yes |
@@ -78,6 +90,19 @@ Do not assert serializer punctuation when decoding can prove the stronger proper
 | empty text result stream | yes |
 | null vs empty string | yes |
 | structured value rejection in text mode | yes |
+
+## Diagnostic contract
+
+Data and diagnostics must never share a stream:
+
+```text
+stdout -> result data only
+stderr -> warnings and errors only
+```
+
+Warnings are non-fatal unless `--warnings-as-errors` is selected. `--quiet` suppresses warnings. These policies are mutually exclusive to avoid ambiguous behavior.
+
+Later milestones must add integration tests whenever they introduce a concrete warning source, not merely rely on the generic warning-module tests.
 
 ## Adding tests
 
@@ -91,8 +116,10 @@ Adapter milestones should always cover, where applicable:
 4. null/empty/absent distinctions;
 5. source-specific type preservation;
 6. extension detection and explicit override;
-7. one representative CLI query;
-8. round-trip behavior when supported.
+7. raw `--data` + explicit format;
+8. one representative CLI query;
+9. warnings introduced by adapter fallback/recovery;
+10. round-trip behavior when supported.
 
 Document-format milestones should additionally cover:
 
