@@ -51,6 +51,59 @@ fn queries_filters_and_projects_json() {
 }
 
 #[test]
+fn reads_json_from_raw_data_argument() {
+    let output = Command::cargo_bin("toon-world")
+        .unwrap()
+        .args([
+            "--data",
+            r#"{"name":"Ada","active":true}"#,
+            "-q",
+            ".name",
+            "--to",
+            "text",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "Ada\n");
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn raw_data_supports_full_query_pipeline() {
+    let output = Command::cargo_bin("toon-world")
+        .unwrap()
+        .args([
+            "--data",
+            r#"{"users":[{"id":1,"active":true},{"id":2,"active":false}]}"#,
+            "-q",
+            ".users[] | select(.active) | .id",
+            "--to",
+            "text",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "1\n");
+}
+
+#[test]
+fn malformed_raw_data_reports_json_parse_error() {
+    let output = Command::cargo_bin("toon-world")
+        .unwrap()
+        .args(["--data", "{"])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains("error[parse:json]"));
+}
+
+#[test]
 fn reads_json_from_stdin_when_file_is_omitted() {
     let output = run_stdin(&["-q", ".name", "--to", "text"], r#"{"name":"Ada"}"#);
 
