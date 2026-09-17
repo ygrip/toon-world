@@ -5,7 +5,11 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use jaq_json::Val;
 
-pub fn read_json(path: Option<&Path>) -> Result<Val> {
+pub fn read_json(path: Option<&Path>, data: Option<&str>) -> Result<Val> {
+    if let Some(data) = data {
+        return parse_json(data.as_bytes());
+    }
+
     let mut bytes = Vec::new();
 
     match path {
@@ -23,6 +27,9 @@ pub fn read_json(path: Option<&Path>) -> Result<Val> {
         }
     }
 
-    jaq_json::read::parse_single(&bytes)
-        .map_err(|err| anyhow!("error[parse:json]: {err:?}"))
+    parse_json(&bytes)
+}
+
+fn parse_json(bytes: &[u8]) -> Result<Val> {
+    jaq_json::read::parse_single(bytes).map_err(|err| anyhow!("error[parse:json]: {err:?}"))
 }
