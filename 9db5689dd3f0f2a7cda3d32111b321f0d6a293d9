@@ -1,0 +1,27 @@
+benches/support/mod.rs
+  1e4662d2c524fa47 5-9,17-20,29,55-57,64,138-173
+tests/compact_matrix.rs
+  1e4662d2c524fa47 9
+docs/BENCHMARKS.md
+  1e4662d2c524fa47 12,14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.23",
+  "base_commit_sha": "9db5689dd3f0f2a7cda3d32111b321f0d6a293d9",
+  "prompts": {
+    "1e4662d2c524fa47": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dbeaa126-64cb-41d0-b265-6ef8ec8d5e44",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "ygrip <yunaz.gilang@gmail.com>",
+      "messages": [],
+      "total_additions": 54,
+      "total_deletions": 3,
+      "accepted_lines": 53,
+      "overriden_lines": 0
+    }
+  }
+}
