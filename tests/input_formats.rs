@@ -46,11 +46,7 @@ fn parses_ndjson_as_ordered_array() {
 
 #[test]
 fn ndjson_accepts_surrounding_whitespace_without_reordering() {
-    let value = input::parse_bytes(
-        b"  {\"id\":1}\n\n{\"id\":2}  \n",
-        InputFormat::Ndjson,
-    )
-    .unwrap();
+    let value = input::parse_bytes(b"  {\"id\":1}\n\n{\"id\":2}  \n", InputFormat::Ndjson).unwrap();
 
     assert_eq!(query_one(value.clone(), ".[0].id"), "1");
     assert_eq!(query_one(value, ".[1].id"), "2");
@@ -84,10 +80,7 @@ fn csv_preserves_quotes_commas_and_crlf_content() {
 
 #[test]
 fn csv_rejects_duplicate_or_empty_headers() {
-    for bytes in [
-        b"id,id\n1,2\n".as_slice(),
-        b"id,\n1,2\n".as_slice(),
-    ] {
+    for bytes in [b"id,id\n1,2\n".as_slice(), b"id,\n1,2\n".as_slice()] {
         let error = input::parse_bytes(bytes, InputFormat::Csv)
             .expect_err("invalid CSV headers must fail")
             .to_string();
@@ -156,11 +149,8 @@ fn toml_preserves_nested_table_structure() {
 
 #[test]
 fn xml_preserves_tag_attribute_and_child_structure() {
-    let value = input::parse_bytes(
-        br#"<user id="1"><name>Ada</name></user>"#,
-        InputFormat::Xml,
-    )
-    .unwrap();
+    let value =
+        input::parse_bytes(br#"<user id="1"><name>Ada</name></user>"#, InputFormat::Xml).unwrap();
 
     assert_eq!(query_one(value.clone(), ".t"), r#""user""#);
     assert_eq!(query_one(value.clone(), ".a.id"), r#""1""#);
@@ -170,11 +160,8 @@ fn xml_preserves_tag_attribute_and_child_structure() {
 
 #[test]
 fn xml_preserves_mixed_content_order() {
-    let value = input::parse_bytes(
-        br#"<p>Hello <strong>world</strong>!</p>"#,
-        InputFormat::Xml,
-    )
-    .unwrap();
+    let value =
+        input::parse_bytes(br#"<p>Hello <strong>world</strong>!</p>"#, InputFormat::Xml).unwrap();
 
     assert_eq!(query_one(value.clone(), ".c[0]"), r#""Hello ""#);
     assert_eq!(query_one(value.clone(), ".c[1].t"), r#""strong""#);
@@ -230,13 +217,7 @@ fn file_extension_selects_yaml_adapter() {
 
     let output = Command::cargo_bin("toon-world")
         .unwrap()
-        .args([
-            file.path().to_str().unwrap(),
-            "-q",
-            ".name",
-            "--to",
-            "text",
-        ])
+        .args([file.path().to_str().unwrap(), "-q", ".name", "--to", "text"])
         .output()
         .unwrap();
 
@@ -251,13 +232,7 @@ fn unknown_extension_falls_back_to_json() {
 
     let output = Command::cargo_bin("toon-world")
         .unwrap()
-        .args([
-            file.path().to_str().unwrap(),
-            "-q",
-            ".name",
-            "--to",
-            "text",
-        ])
+        .args([file.path().to_str().unwrap(), "-q", ".name", "--to", "text"])
         .output()
         .unwrap();
 

@@ -57,10 +57,7 @@ fn resolve_format(
 
     (
         InputFormat::Json,
-        vec![Warning::new(
-            "input",
-            format!("{reason}; assuming JSON"),
-        )],
+        vec![Warning::new("input", format!("{reason}; assuming JSON"))],
     )
 }
 
@@ -159,9 +156,34 @@ fn parse_yaml(input: &str) -> Result<Val> {
 fn parse_xml(input: &str) -> Result<Val> {
     let values = jaq_fmts::read::xml::parse_many(input)
         .map(|value| value.map_err(|error| anyhow!("error[parse:xml]: {error}")))
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>();
 
-    Ok(collapse_single(values))
+    match values {
+        Ok(values) => Ok(collapse_single(values)),
+        Err(_) => parse_xml_fragment(input),
+    }
+}
+
+fn parse_xml_fragment(input: &str) -> Result<Val> {
+    let wrapped = format!("<toon-world-fragment>{input}</toon-world-fragment>");
+    let wrapper = jaq_fmts::read::xml::parse_many(&wrapped)
+        .next()
+        .expect("synthetic XML wrapper has one root")
+        .map_err(|error| anyhow!("error[parse:xml]: {error}"))?;
+
+    let Val::Obj(wrapper) = wrapper else {
+        bail!("error[parse:xml]: synthetic wrapper did not normalize to an object");
+    };
+    let children = wrapper
+        .get(&Val::utf8_str("c"))
+        .cloned()
+        .unwrap_or_else(|| Val::Arr(Default::default()));
+
+    let Val::Arr(children) = children else {
+        bail!("error[parse:xml]: synthetic wrapper did not contain child nodes");
+    };
+
+    Ok(children.iter().cloned().collect())
 }
 
 fn collapse_single(values: Vec<Val>) -> Val {

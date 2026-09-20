@@ -57,7 +57,11 @@ fn json_output_preserves_large_integer_text() {
 #[test]
 fn structured_output_collects_multiple_query_results_in_order() {
     let rendered = output::encode_results(
-        &[value(r#""first""#), value(r#""second""#), value(r#""third""#)],
+        &[
+            value(r#""first""#),
+            value(r#""second""#),
+            value(r#""third""#),
+        ],
         OutputFormat::Json,
     )
     .unwrap();

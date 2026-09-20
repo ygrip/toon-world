@@ -47,7 +47,10 @@ fn queries_filters_and_projects_json() {
         .unwrap();
 
     assert!(output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "{\"id\":1,\"name\":\"Ada\"}\n");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "{\"id\":1,\"name\":\"Ada\"}\n"
+    );
 }
 
 #[test]
@@ -76,10 +79,7 @@ fn emits_multiple_text_results_line_by_line() {
 
 #[test]
 fn empty_text_result_stream_emits_no_output() {
-    let output = run_stdin(
-        &["-q", ".[] | select(. > 10)", "--to", "text"],
-        "[1,2,3]",
-    );
+    let output = run_stdin(&["-q", ".[] | select(. > 10)", "--to", "text"], "[1,2,3]");
 
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
@@ -87,10 +87,7 @@ fn empty_text_result_stream_emits_no_output() {
 
 #[test]
 fn emits_empty_array_for_empty_structured_result_stream() {
-    let output = run_stdin(
-        &["-q", ".[] | select(. > 10)", "--to", "json"],
-        "[1,2,3]",
-    );
+    let output = run_stdin(&["-q", ".[] | select(. > 10)", "--to", "json"], "[1,2,3]");
 
     assert!(output.status.success());
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "[]\n");

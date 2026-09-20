@@ -32,13 +32,7 @@ fn unknown_extension_warns_but_keeps_stdout_clean() {
 
     let output = Command::cargo_bin("toon-world")
         .unwrap()
-        .args([
-            file.path().to_str().unwrap(),
-            "-q",
-            ".name",
-            "--to",
-            "text",
-        ])
+        .args([file.path().to_str().unwrap(), "-q", ".name", "--to", "text"])
         .output()
         .unwrap();
 

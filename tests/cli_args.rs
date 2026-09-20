@@ -57,15 +57,7 @@ fn parses_raw_data_with_explicit_format() {
 
 #[test]
 fn dash_is_preserved_as_explicit_stdin_path() {
-    let args = Args::try_parse_from([
-        "toon-world",
-        "-",
-        "--from",
-        "yaml",
-        "--to",
-        "text",
-    ])
-    .unwrap();
+    let args = Args::try_parse_from(["toon-world", "-", "--from", "yaml", "--to", "text"]).unwrap();
 
     assert_eq!(args.file, Some(PathBuf::from("-")));
     assert_eq!(args.from, Some(InputFormat::Yaml));
@@ -74,13 +66,8 @@ fn dash_is_preserved_as_explicit_stdin_path() {
 
 #[test]
 fn rejects_file_and_raw_data_together() {
-    let error = Args::try_parse_from([
-        "toon-world",
-        "data.json",
-        "--data",
-        r#"{"name":"Ada"}"#,
-    ])
-    .expect_err("file and --data must be mutually exclusive");
+    let error = Args::try_parse_from(["toon-world", "data.json", "--data", r#"{"name":"Ada"}"#])
+        .expect_err("file and --data must be mutually exclusive");
 
     assert!(error.to_string().contains("cannot be used with"));
 }
