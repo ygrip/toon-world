@@ -65,11 +65,11 @@ pub fn encode(value: &Value) -> Result<Option<String>> {
     Ok(Some(output))
 }
 
-pub fn token_count(value: &str) -> Result<usize> {
-    Ok(tiktoken_rs::cl100k_base()
-        .context("error[encode:sparse-toon]: could not load cl100k tokenizer")?
-        .encode_with_special_tokens(value)
-        .len())
+pub fn has_fewer_tokens(candidate: &str, standard: &str) -> Result<bool> {
+    let encoder = tiktoken_rs::cl100k_base()
+        .context("error[encode:sparse-toon]: could not load cl100k tokenizer")?;
+    Ok(encoder.encode_with_special_tokens(candidate).len()
+        < encoder.encode_with_special_tokens(standard).len())
 }
 
 fn schema_for_rows(values: &[Value]) -> Result<Option<Vec<Field>>> {
@@ -786,7 +786,7 @@ fn parse_node(input: &str) -> Result<(Node, &str)> {
             .ok_or_else(|| anyhow!("error[parse:sparse-toon]: missing recursive node line"))?;
         if let Ok((count, columns)) = parse_shape(&input[..line_end]) {
             let mut rest = &input[line_end + 1..];
-            let mut rows = Vec::with_capacity(count);
+            let mut rows = Vec::with_capacity(count.min(rest.lines().count()));
             for _ in 0..count {
                 let (line, next) = rest.split_once('\n').ok_or_else(|| {
                     anyhow!("error[parse:sparse-toon]: missing recursive table row")

@@ -235,3 +235,14 @@ fn malformed_sparse_toon_reports_its_format() {
 
     assert!(error.contains("error[parse:sparse-toon]"));
 }
+
+
+#[test]
+fn legacy_recursive_sparse_rejects_oversized_row_count_without_preallocating() {
+    let rendered = "@toon-world/sparse-v1\nroot=^0\n^0=[1000000000]{id}:\n";
+    let error = input::parse_bytes(rendered.as_bytes(), InputFormat::SparseToon)
+        .expect_err("oversized recursive table must fail without huge allocation")
+        .to_string();
+
+    assert!(error.contains("missing recursive table row"));
+}
