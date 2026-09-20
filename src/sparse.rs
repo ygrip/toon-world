@@ -4,6 +4,25 @@ use anyhow::{anyhow, bail, Context, Result};
 use serde_json::{Map, Value};
 
 const HEADER: &str = "@toon-world/sparse-v1\n";
+const MAX_DEPTH: usize = 64;
+
+#[derive(Clone, Debug)]
+struct Field {
+    key: String,
+    kind: FieldKind,
+}
+
+#[derive(Clone, Debug)]
+enum FieldKind {
+    Leaf,
+    Object(Vec<Field>),
+}
+
+#[derive(Debug)]
+struct Line {
+    indent: usize,
+    text: String,
+}
 
 #[derive(Clone)]
 enum Cell {
@@ -20,165 +39,323 @@ enum Node {
         rows: Vec<Vec<Cell>>,
     },
 }
-struct Builder {
-    nodes: Vec<Option<Node>>,
-}
-
-impl Builder {
-    fn value(&mut self, value: &Value) -> Cell {
-        if !value.is_array() && !value.is_object() {
-            return Cell::Value(value.clone());
-        }
-        let id = self.nodes.len();
-        self.nodes.push(None);
-        let node = match value {
-            Value::Object(object) => Node::Object(
-                object
-                    .iter()
-                    .map(|(key, value)| (key.clone(), self.value(value)))
-                    .collect(),
-            ),
-            Value::Array(values) if !values.is_empty() && values.iter().all(Value::is_object) => {
-                self.table(values)
-            }
-            Value::Array(values) => {
-                Node::List(values.iter().map(|value| self.value(value)).collect())
-            }
-            _ => unreachable!(),
-        };
-        self.nodes[id] = Some(node);
-        Cell::Ref(id)
-    }
-    fn table(&mut self, values: &[Value]) -> Node {
-        let mut columns = Vec::new();
-        let mut rows = Vec::with_capacity(values.len());
-        for value in values {
-            let Value::Object(object) = value else {
-                unreachable!()
-            };
-            let mut flat = Vec::new();
-            self.flatten(object, "", &mut flat);
-            for (path, _) in &flat {
-                if !columns.contains(path) {
-                    columns.push(path.clone());
-                }
-            }
-            rows.push(flat);
-        }
-        if columns.is_empty() {
-            return Node::List(values.iter().map(|value| self.value(value)).collect());
-        }
-        let rows = rows
-            .into_iter()
-            .map(|flat| {
-                columns
-                    .iter()
-                    .map(|column| {
-                        flat.iter()
-                            .find(|(path, _)| path == column)
-                            .map(|(_, cell)| cell.clone())
-                            .unwrap_or(Cell::Missing)
-                    })
-                    .collect()
-            })
-            .collect();
-        Node::Table { columns, rows }
-    }
-    fn flatten(
-        &mut self,
-        object: &Map<String, Value>,
-        prefix: &str,
-        output: &mut Vec<(String, Cell)>,
-    ) {
-        for (key, value) in object {
-            let path = format!("{prefix}/{}", escape_pointer(key));
-            match value {
-                Value::Object(child) if !child.is_empty() => self.flatten(child, &path, output),
-                _ => output.push((path, self.value(value))),
-            }
-        }
-    }
-}
-
-/// Encodes any object or array as recursive sparse-TOON v1. Scalars use standard TOON.
+/// Encodes root arrays of objects as headerless sparse TOON. Other shapes use standard TOON.
 pub fn encode(value: &Value) -> Result<Option<String>> {
-    if !value.is_array() && !value.is_object() {
+    let Value::Array(values) = value else {
+        return Ok(None);
+    };
+    if values.is_empty() || !values.iter().all(Value::is_object) {
         return Ok(None);
     }
-    let mut builder = Builder { nodes: Vec::new() };
-    let Cell::Ref(root) = builder.value(value) else {
-        unreachable!()
-    };
-    let mut output = format!("{HEADER}root=^{root}\n");
-    for (id, node) in builder.nodes.into_iter().enumerate() {
-        output.push_str(&format!("^{id}="));
-        render_node(node.expect("builder fills nodes"), &mut output)?;
+    let mut output = String::new();
+    if values
+        .iter()
+        .all(|value| value.as_object().is_some_and(Map::is_empty))
+    {
+        render_empty_object_table(None, values.len(), 0, &mut output)?;
+    } else {
+        let Some(schema) = schema_for_rows(values)? else {
+            return Ok(None);
+        };
+        render_table(None, values, &schema, 0, &mut output)?;
+    }
+    if !matches!(decode(&output), Ok(Some(decoded)) if decoded == *value) {
+        return Ok(None);
     }
     Ok(Some(output))
 }
+
 pub fn token_count(value: &str) -> Result<usize> {
     Ok(tiktoken_rs::cl100k_base()
         .context("error[encode:sparse-toon]: could not load cl100k tokenizer")?
         .encode_with_special_tokens(value)
         .len())
 }
-fn render_node(node: Node, output: &mut String) -> Result<()> {
-    match node {
-        Node::Object(entries) => {
-            output.push('{');
-            for (index, (key, cell)) in entries.into_iter().enumerate() {
-                if index > 0 {
-                    output.push(',');
-                }
-                output.push_str(&serde_json::to_string(&key)?);
-                output.push(':');
-                render_cell(cell, output)?;
-            }
-            output.push_str("}\n");
+
+fn schema_for_rows(values: &[Value]) -> Result<Option<Vec<Field>>> {
+    let mut fields = Vec::new();
+    for value in values {
+        let object = value
+            .as_object()
+            .ok_or_else(|| anyhow!("error[encode:sparse-toon]: table row must be an object"))?;
+        if !merge_schema(&mut fields, object, 0)? {
+            return Ok(None);
         }
-        Node::List(cells) => {
-            output.push('[');
-            for (index, cell) in cells.into_iter().enumerate() {
-                if index > 0 {
-                    output.push(',');
-                }
-                render_cell(cell, output)?;
-            }
-            output.push_str("]\n");
-        }
-        Node::Table { columns, rows } => {
-            output.push_str(&format!(
-                "[{}]{{{}}}:\n",
-                rows.len(),
-                columns
-                    .iter()
-                    .map(|column| render_column(column))
-                    .collect::<Result<Vec<_>>>()?
-                    .join(",")
-            ));
-            for row in rows {
-                for (index, cell) in row.into_iter().enumerate() {
-                    if index > 0 {
-                        output.push(',');
-                    }
-                    render_cell(cell, output)?;
-                }
-                output.push('\n');
-            }
-        }
-    };
-    Ok(())
+    }
+    if values.iter().any(|value| {
+        value
+            .as_object()
+            .is_some_and(|object| !row_matches_schema(&fields, object))
+    }) {
+        return Ok(None);
+    }
+    Ok((!fields.is_empty()).then_some(fields))
 }
-fn render_cell(cell: Cell, output: &mut String) -> Result<()> {
-    match cell {
-        Cell::Value(value) => output.push_str(&serde_json::to_string(&value)?),
-        Cell::Ref(id) => output.push_str(&format!("^{id}")),
-        Cell::Missing => output.push('~'),
-    };
+
+fn row_matches_schema(fields: &[Field], object: &Map<String, Value>) -> bool {
+    fields
+        .iter()
+        .all(|field| match (&field.kind, object.get(&field.key)) {
+            (_, None) => true,
+            (FieldKind::Leaf, Some(value)) => !value.is_array() && !value.is_object(),
+            (FieldKind::Object(nested), Some(Value::Object(child))) => {
+                row_matches_schema(nested, child)
+            }
+            _ => false,
+        })
+}
+
+fn merge_schema(
+    fields: &mut Vec<Field>,
+    object: &Map<String, Value>,
+    depth: usize,
+) -> Result<bool> {
+    if depth >= MAX_DEPTH {
+        return Ok(false);
+    }
+    for (key, value) in object {
+        let observed = match value {
+            Value::Array(_) => continue,
+            Value::Object(map) if map.is_empty() => continue,
+            Value::Object(map) => {
+                let mut nested = Vec::new();
+                if !merge_schema(&mut nested, map, depth + 1)? {
+                    return Ok(false);
+                }
+                if nested.is_empty() {
+                    continue;
+                }
+                FieldKind::Object(nested)
+            }
+            _ => FieldKind::Leaf,
+        };
+        match fields.iter_mut().find(|field| field.key == *key) {
+            Some(Field {
+                kind: FieldKind::Object(existing),
+                ..
+            }) => {
+                let FieldKind::Object(observed) = observed else {
+                    return Ok(false);
+                };
+                if !merge_fields(existing, observed) {
+                    return Ok(false);
+                }
+            }
+            Some(Field {
+                kind: FieldKind::Leaf,
+                ..
+            }) if matches!(observed, FieldKind::Leaf) => {}
+            Some(_) => return Ok(false),
+            None => fields.push(Field {
+                key: key.clone(),
+                kind: observed,
+            }),
+        }
+    }
+    Ok(true)
+}
+
+fn merge_fields(existing: &mut Vec<Field>, observed: Vec<Field>) -> bool {
+    for field in observed {
+        match existing.iter_mut().find(|item| item.key == field.key) {
+            Some(Field {
+                kind: FieldKind::Object(current),
+                ..
+            }) => {
+                let FieldKind::Object(nested) = field.kind else {
+                    return false;
+                };
+                if !merge_fields(current, nested) {
+                    return false;
+                }
+            }
+            Some(Field {
+                kind: FieldKind::Leaf,
+                ..
+            }) if matches!(field.kind, FieldKind::Leaf) => {}
+            Some(_) => return false,
+            None => existing.push(field),
+        }
+    }
+    true
+}
+
+fn render_table(
+    key: Option<&str>,
+    values: &[Value],
+    fields: &[Field],
+    indent: usize,
+    output: &mut String,
+) -> Result<()> {
+    output.push_str(&" ".repeat(indent));
+    if let Some(key) = key {
+        output.push_str(&render_key(key)?);
+    }
+    output.push_str(&format!("[{}]{{", values.len()));
+    render_fields(fields, output)?;
+    output.push_str("}:\n");
+    for value in values {
+        let object = value
+            .as_object()
+            .ok_or_else(|| anyhow!("error[encode:sparse-toon]: table row must be an object"))?;
+        let mut cells = Vec::new();
+        collect_cells(fields, object, &mut cells)?;
+        output.push_str(&" ".repeat(indent + 2));
+        output.push_str(&cells.join(","));
+        output.push('\n');
+        render_attachments(object, indent + 4, output)?;
+    }
     Ok(())
 }
 
-/// Decodes current and recursive sparse-v1. `None` means standard TOON.
+fn render_empty_object_table(
+    key: Option<&str>,
+    count: usize,
+    indent: usize,
+    output: &mut String,
+) -> Result<()> {
+    output.push_str(&" ".repeat(indent));
+    if let Some(key) = key {
+        output.push_str(&render_key(key)?);
+    }
+    output.push_str(&format!("[{count}]{{}}:\n"));
+    Ok(())
+}
+
+fn render_fields(fields: &[Field], output: &mut String) -> Result<()> {
+    for (index, field) in fields.iter().enumerate() {
+        if index > 0 {
+            output.push(',');
+        }
+        output.push_str(&render_key(&field.key)?);
+        if let FieldKind::Object(nested) = &field.kind {
+            output.push('{');
+            render_fields(nested, output)?;
+            output.push('}');
+        }
+    }
+    Ok(())
+}
+
+fn collect_cells(
+    fields: &[Field],
+    object: &Map<String, Value>,
+    cells: &mut Vec<String>,
+) -> Result<()> {
+    for field in fields {
+        match &field.kind {
+            FieldKind::Leaf => match object.get(&field.key) {
+                Some(value) if !value.is_array() && !value.is_object() => {
+                    cells.push(render_primitive(value)?)
+                }
+                None => cells.push("~".to_owned()),
+                Some(_) => bail!("error[encode:sparse-toon]: conflicting table row shape"),
+            },
+            FieldKind::Object(nested) => match object.get(&field.key) {
+                Some(Value::Object(child)) => collect_cells(nested, child, cells)?,
+                None => cells.extend((0..leaf_count(nested)).map(|_| "~".to_owned())),
+                Some(_) => bail!("error[encode:sparse-toon]: conflicting table row shape"),
+            },
+        }
+    }
+    Ok(())
+}
+
+fn render_primitive(value: &Value) -> Result<String> {
+    let rendered = toon_format::encode_default(value)
+        .map_err(|error| anyhow!("error[encode:sparse-toon]: {error}"))?;
+    if matches!(value, Value::String(string) if string == "~") {
+        return Ok("\"~\"".to_owned());
+    }
+    Ok(rendered)
+}
+
+fn render_key(key: &str) -> Result<String> {
+    let mut chars = key.chars();
+    if matches!(chars.next(), Some(first) if first.is_ascii_alphabetic() || first == '_')
+        && chars
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
+    {
+        return Ok(key.to_owned());
+    }
+    serde_json::to_string(key).context("error[encode:sparse-toon]: invalid field name")
+}
+
+fn render_attachments(
+    object: &Map<String, Value>,
+    indent: usize,
+    output: &mut String,
+) -> Result<()> {
+    for (key, value) in object {
+        match value {
+            Value::Array(values) => render_array_attachment(key, values, indent, output)?,
+            Value::Object(child) if child.is_empty() => {
+                output.push_str(&format!("{}{}:\n", " ".repeat(indent), render_key(key)?));
+            }
+            Value::Object(child) if has_attachments(child) => {
+                output.push_str(&format!("{}{}:\n", " ".repeat(indent), render_key(key)?));
+                render_attachments(child, indent + 2, output)?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn has_attachments(object: &Map<String, Value>) -> bool {
+    object.values().any(|value| match value {
+        Value::Array(_) => true,
+        Value::Object(child) => child.is_empty() || has_attachments(child),
+        _ => false,
+    })
+}
+
+fn render_array_attachment(
+    key: &str,
+    values: &[Value],
+    indent: usize,
+    output: &mut String,
+) -> Result<()> {
+    if values.is_empty() {
+        output.push_str(&format!("{}{}[0]:\n", " ".repeat(indent), render_key(key)?));
+        return Ok(());
+    }
+    if values
+        .iter()
+        .all(|value| value.as_object().is_some_and(Map::is_empty))
+    {
+        return render_empty_object_table(Some(key), values.len(), indent, output);
+    }
+    if values.iter().all(Value::is_object) {
+        if let Some(schema) = schema_for_rows(values)? {
+            return render_table(Some(key), values, &schema, indent, output);
+        }
+    }
+    let wrapped = Value::Object(Map::from_iter([(
+        key.to_owned(),
+        Value::Array(values.to_vec()),
+    )]));
+    let rendered = toon_format::encode_default(&wrapped)
+        .map_err(|error| anyhow!("error[encode:sparse-toon]: {error}"))?;
+    for line in rendered.lines() {
+        output.push_str(&" ".repeat(indent));
+        output.push_str(line);
+        output.push('\n');
+    }
+    Ok(())
+}
+
+fn leaf_count(fields: &[Field]) -> usize {
+    fields
+        .iter()
+        .map(|field| match &field.kind {
+            FieldKind::Leaf => 1,
+            FieldKind::Object(nested) => leaf_count(nested),
+        })
+        .sum()
+}
+
+/// Decodes headerless sparse TOON and legacy sparse-v1. `None` means standard TOON.
 pub fn decode(input: &str) -> Result<Option<Value>> {
     if let Some(body) = input.strip_prefix(HEADER) {
         return if body.starts_with("root=^") {
@@ -187,8 +364,388 @@ pub fn decode(input: &str) -> Result<Option<Value>> {
             decode_legacy_v1(body).map(Some)
         };
     }
-    Ok(None)
+    let Some(first) = input.lines().find(|line| !line.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let indent = first
+        .chars()
+        .take_while(|character| *character == ' ')
+        .count();
+    let Some(header) = parse_header(&first[indent..])? else {
+        return Ok(None);
+    };
+    if indent != 0 || header.key.is_some() || header.fields.is_none() || !header.inline.is_empty() {
+        return Ok(None);
+    }
+    let lines = parse_lines(input)?;
+    let mut index = 0;
+    let value = parse_table(&lines, &mut index, 0, false)?;
+    if index != lines.len() {
+        bail!("error[parse:sparse-toon]: trailing content after root table");
+    }
+    Ok(Some(value))
 }
+
+#[derive(Debug)]
+struct HeaderLine {
+    key: Option<String>,
+    count: usize,
+    fields: Option<Vec<Field>>,
+    inline: String,
+}
+
+fn parse_lines(input: &str) -> Result<Vec<Line>> {
+    input
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            let indent = line
+                .chars()
+                .take_while(|character| *character == ' ')
+                .count();
+            if line[..indent].contains('\t') || line[indent..].starts_with('\t') {
+                bail!("error[parse:sparse-toon]: tabs are not valid indentation");
+            }
+            if indent > MAX_DEPTH * 2 {
+                bail!("error[parse:sparse-toon]: maximum nesting depth exceeded");
+            }
+            Ok(Line {
+                indent,
+                text: line[indent..].to_owned(),
+            })
+        })
+        .collect()
+}
+
+fn parse_header(input: &str) -> Result<Option<HeaderLine>> {
+    let Some(bracket) = find_unquoted(input, '[') else {
+        return Ok(None);
+    };
+    let Some(close) = input[bracket + 1..].find(']') else {
+        bail!("error[parse:sparse-toon]: invalid array header");
+    };
+    let close = bracket + 1 + close;
+    let key = if bracket == 0 {
+        None
+    } else {
+        Some(parse_key(&input[..bracket])?)
+    };
+    let count = input[bracket + 1..close]
+        .parse()
+        .context("error[parse:sparse-toon]: invalid array length")?;
+    let mut rest = &input[close + 1..];
+    let fields = if rest.starts_with('{') {
+        let end = matching_brace(rest)?;
+        let fields = if end == 1 {
+            Vec::new()
+        } else {
+            parse_fields(&rest[1..end], 0)?
+        };
+        rest = &rest[end + 1..];
+        Some(fields)
+    } else {
+        None
+    };
+    let Some(inline) = rest.strip_prefix(':') else {
+        bail!("error[parse:sparse-toon]: expected ':' after array header");
+    };
+    Ok(Some(HeaderLine {
+        key,
+        count,
+        fields,
+        inline: inline.trim_start().to_owned(),
+    }))
+}
+
+fn parse_fields(input: &str, depth: usize) -> Result<Vec<Field>> {
+    if input.is_empty() {
+        bail!("error[parse:sparse-toon]: field list must not be empty");
+    }
+    if depth >= MAX_DEPTH {
+        bail!("error[parse:sparse-toon]: maximum field depth exceeded");
+    }
+    let fields = split_cells(input)?
+        .into_iter()
+        .map(|entry| {
+            if let Some(open) = find_unquoted(&entry, '{') {
+                if matching_brace(&entry[open..])? != entry.len() - open - 1 {
+                    bail!("error[parse:sparse-toon]: invalid nested field group");
+                }
+                Ok(Field {
+                    key: parse_key(&entry[..open])?,
+                    kind: FieldKind::Object(parse_fields(
+                        &entry[open + 1..entry.len() - 1],
+                        depth + 1,
+                    )?),
+                })
+            } else {
+                Ok(Field {
+                    key: parse_key(&entry)?,
+                    kind: FieldKind::Leaf,
+                })
+            }
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let mut seen = HashSet::new();
+    if fields.iter().any(|field| !seen.insert(&field.key)) {
+        bail!("error[parse:sparse-toon]: duplicate field name");
+    }
+    Ok(fields)
+}
+
+fn matching_brace(input: &str) -> Result<usize> {
+    let mut depth = 0usize;
+    let mut quoted = false;
+    let mut escaped = false;
+    for (index, character) in input.char_indices() {
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                quoted = false;
+            }
+            continue;
+        }
+        match character {
+            '"' => quoted = true,
+            '{' => depth += 1,
+            '}' => {
+                depth = depth
+                    .checked_sub(1)
+                    .ok_or_else(|| anyhow!("error[parse:sparse-toon]: unbalanced field group"))?;
+                if depth == 0 {
+                    return Ok(index);
+                }
+            }
+            _ => {}
+        }
+    }
+    bail!("error[parse:sparse-toon]: unbalanced field group")
+}
+
+fn find_unquoted(input: &str, needle: char) -> Option<usize> {
+    let mut quoted = false;
+    let mut escaped = false;
+    for (index, character) in input.char_indices() {
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                quoted = false;
+            }
+        } else if character == '"' {
+            quoted = true;
+        } else if character == needle {
+            return Some(index);
+        }
+    }
+    None
+}
+
+fn parse_key(input: &str) -> Result<String> {
+    if input.starts_with('"') {
+        return serde_json::from_str(input)
+            .context("error[parse:sparse-toon]: invalid quoted field name");
+    }
+    if input.is_empty() {
+        bail!("error[parse:sparse-toon]: field name must not be empty");
+    }
+    Ok(input.to_owned())
+}
+
+fn parse_table(
+    lines: &[Line],
+    index: &mut usize,
+    indent: usize,
+    require_key: bool,
+) -> Result<Value> {
+    let line = lines
+        .get(*index)
+        .ok_or_else(|| anyhow!("error[parse:sparse-toon]: missing table header"))?;
+    if line.indent != indent {
+        bail!("error[parse:sparse-toon]: invalid table indentation");
+    }
+    let header = parse_header(&line.text)?
+        .ok_or_else(|| anyhow!("error[parse:sparse-toon]: invalid table header"))?;
+    if require_key != header.key.is_some() || !header.inline.is_empty() {
+        bail!("error[parse:sparse-toon]: invalid sparse table header");
+    }
+    let fields = header
+        .fields
+        .ok_or_else(|| anyhow!("error[parse:sparse-toon]: sparse table requires fields"))?;
+    *index += 1;
+    if fields.is_empty() {
+        return Ok(Value::Array(
+            (0..header.count)
+                .map(|_| Value::Object(Map::new()))
+                .collect(),
+        ));
+    }
+    let mut rows = Vec::with_capacity(header.count.min(lines.len()));
+    for _ in 0..header.count {
+        let row_line = lines
+            .get(*index)
+            .ok_or_else(|| anyhow!("error[parse:sparse-toon]: missing table row"))?;
+        if row_line.indent != indent + 2 {
+            bail!("error[parse:sparse-toon]: invalid table row indentation");
+        }
+        let cells = split_cells(&row_line.text)?;
+        if cells.len() != leaf_count(&fields) {
+            bail!(
+                "error[parse:sparse-toon]: expected {} cells, found {}",
+                leaf_count(&fields),
+                cells.len()
+            );
+        }
+        let mut cell_index = 0;
+        let mut object = decode_row(&fields, &cells, &mut cell_index)?;
+        *index += 1;
+        parse_attachments(lines, index, indent + 4, &mut object)?;
+        rows.push(Value::Object(object));
+    }
+    Ok(Value::Array(rows))
+}
+
+fn decode_row(fields: &[Field], cells: &[String], index: &mut usize) -> Result<Map<String, Value>> {
+    let mut object = Map::new();
+    for field in fields {
+        match &field.kind {
+            FieldKind::Leaf => {
+                let cell = cells
+                    .get(*index)
+                    .ok_or_else(|| anyhow!("error[parse:sparse-toon]: missing row cell"))?;
+                *index += 1;
+                if cell != "~" {
+                    let value = toon_format::decode_default(cell)
+                        .map_err(|error| anyhow!("error[parse:sparse-toon]: {error}"))?;
+                    object.insert(field.key.clone(), value);
+                }
+            }
+            FieldKind::Object(nested) => {
+                let child = decode_row(nested, cells, index)?;
+                if !child.is_empty() {
+                    object.insert(field.key.clone(), Value::Object(child));
+                }
+            }
+        }
+    }
+    Ok(object)
+}
+
+fn parse_attachments(
+    lines: &[Line],
+    index: &mut usize,
+    indent: usize,
+    object: &mut Map<String, Value>,
+) -> Result<()> {
+    while let Some(line) = lines.get(*index) {
+        if line.indent < indent {
+            break;
+        }
+        if line.indent > indent {
+            bail!("error[parse:sparse-toon]: unexpected attachment indentation");
+        }
+        if let Some(header) = parse_header(&line.text)? {
+            if header.fields.is_some() && header.inline.is_empty() {
+                let key = header.key.clone().ok_or_else(|| {
+                    anyhow!("error[parse:sparse-toon]: child table requires a key")
+                })?;
+                let value = parse_table(lines, index, indent, true)?;
+                merge_value(object, key, value)?;
+                continue;
+            }
+            if header.fields.is_none() && header.count == 0 && header.inline.is_empty() {
+                let key = header.key.ok_or_else(|| {
+                    anyhow!("error[parse:sparse-toon]: child array requires a key")
+                })?;
+                *index += 1;
+                merge_value(object, key, Value::Array(Vec::new()))?;
+                continue;
+            }
+            parse_standard_attachment(lines, index, indent, object)?;
+            continue;
+        }
+        if let Some((key, rest)) = split_key_line(&line.text)? {
+            if rest.is_empty() {
+                *index += 1;
+                let mut child = match object.remove(&key) {
+                    Some(Value::Object(child)) => child,
+                    Some(_) => bail!("error[parse:sparse-toon]: conflicting attachment value"),
+                    None => Map::new(),
+                };
+                parse_attachments(lines, index, indent + 2, &mut child)?;
+                object.insert(key, Value::Object(child));
+                continue;
+            }
+        }
+        parse_standard_attachment(lines, index, indent, object)?;
+    }
+    Ok(())
+}
+
+fn split_key_line(input: &str) -> Result<Option<(String, &str)>> {
+    let Some(colon) = find_unquoted(input, ':') else {
+        return Ok(None);
+    };
+    Ok(Some((
+        parse_key(&input[..colon])?,
+        input[colon + 1..].trim_start(),
+    )))
+}
+
+fn parse_standard_attachment(
+    lines: &[Line],
+    index: &mut usize,
+    indent: usize,
+    object: &mut Map<String, Value>,
+) -> Result<()> {
+    let start = *index;
+    *index += 1;
+    while let Some(line) = lines.get(*index) {
+        if line.indent <= indent {
+            break;
+        }
+        *index += 1;
+    }
+    let mut input = String::new();
+    for line in &lines[start..*index] {
+        if line.indent < indent {
+            bail!("error[parse:sparse-toon]: invalid attachment indentation");
+        }
+        input.push_str(&" ".repeat(line.indent - indent));
+        input.push_str(&line.text);
+        input.push('\n');
+    }
+    let value: Value = toon_format::decode_default(&input)
+        .map_err(|error| anyhow!("error[parse:sparse-toon]: {error}"))?;
+    let Value::Object(decoded) = value else {
+        bail!("error[parse:sparse-toon]: attachment must decode to an object");
+    };
+    for (key, value) in decoded {
+        merge_value(object, key, value)?;
+    }
+    Ok(())
+}
+
+fn merge_value(object: &mut Map<String, Value>, key: String, value: Value) -> Result<()> {
+    match (object.get_mut(&key), value) {
+        (None, value) => {
+            object.insert(key, value);
+        }
+        (Some(Value::Object(existing)), Value::Object(incoming)) => {
+            for (nested_key, nested_value) in incoming {
+                merge_value(existing, nested_key, nested_value)?;
+            }
+        }
+        _ => bail!("error[parse:sparse-toon]: duplicate or conflicting attachment"),
+    }
+    Ok(())
+}
+
 fn decode_recursive_v1(body: &str) -> Result<Value> {
     let (root, mut rest) = body
         .split_once('\n')
@@ -466,22 +1023,6 @@ fn parse_shape(shape: &str) -> Result<(usize, Vec<String>)> {
         bail!("error[parse:sparse-toon]: columns must be JSON Pointer paths");
     }
     Ok((count, columns))
-}
-
-fn render_column(pointer: &str) -> Result<String> {
-    let segments = pointer
-        .strip_prefix('/')
-        .ok_or_else(|| anyhow!("error[encode:sparse-toon]: invalid column path"))?
-        .split('/')
-        .map(unescape_pointer)
-        .collect::<Result<Vec<_>>>()?;
-    if segments
-        .iter()
-        .all(|segment| is_bare_column_segment(segment))
-    {
-        return Ok(segments.join("."));
-    }
-    serde_json::to_string(pointer).context("error[encode:sparse-toon]: invalid column path")
 }
 
 fn parse_column(column: &str) -> Result<String> {

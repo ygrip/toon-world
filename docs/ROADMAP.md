@@ -55,7 +55,7 @@ Do not add `--keep`, `--drop`, or `--drop-null`: jq already expresses those tran
 
 ## Experimental — sparse heterogeneous tables
 
-Implemented as an opt-in sparse-TOON v1 experiment. It recursively flattens object leaves into stable JSON-Pointer columns, keeps arrays as values, distinguishes missing, null, and empty values, and preserves row order. It remains experimental until broader production-shaped benchmarks validate the current fixture results.
+Implemented as an opt-in headerless sparse-TOON experiment. It folds nested objects into TOON-style field groups, flattens their primitive leaves into rows, places arrays in indented child tables, distinguishes missing, null, and empty values, and preserves row order. Legacy sparse-v1 remains decode-only. The dialect remains experimental until broader production-shaped benchmarks validate the current fixture results.
 
 ## Release shape
 

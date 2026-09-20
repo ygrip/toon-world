@@ -21,9 +21,10 @@ fn compact_sparse_toon_round_trips_nested_sparse_rows() {
     ]);
     let rendered = sparse::encode(&original).unwrap().unwrap();
 
-    assert!(rendered.starts_with("@toon-world/sparse-v1\n"));
-    assert!(rendered.contains("id,profile.name,profile.team,roles"));
-    assert!(!rendered.contains("\"/profile/name\""));
+    assert!(rendered.starts_with("[3]{id,profile{name,team},active}:\n"));
+    assert!(rendered.contains("    roles[1]: admin"));
+    assert!(!rendered.contains("@toon-world/sparse-v1"));
+    assert!(!rendered.contains("root=^") && !rendered.contains("^0="));
     assert_eq!(decoded(&rendered), original);
 }
 
@@ -48,10 +49,10 @@ fn compact_escapes_pointer_keys_and_references_nested_arrays() {
     ]);
     let rendered = sparse::encode(&original).unwrap().unwrap();
 
-    assert!(rendered.contains("/a~1b/til~0de"));
-    assert!(rendered.contains("items"));
-    assert!(rendered.contains("root=^0"));
-    assert!(!rendered.contains("[1,{\"name\":\"Ada\"}]"));
+    assert!(rendered.starts_with("[2]{\"a/b\"{\"til~de\"}}:\n"));
+    assert!(rendered.contains("items[2]:"));
+    assert!(rendered.contains("items[0]:"));
+    assert!(!rendered.contains("root=^") && !rendered.contains("^0="));
     assert_eq!(decoded(&rendered), original);
 }
 
@@ -85,8 +86,10 @@ fn recursive_v1_round_trips_cucumber_shaped_nested_data() {
     }]);
     let rendered = sparse::encode(&original).unwrap().unwrap();
 
-    assert!(rendered.starts_with("@toon-world/sparse-v1\nroot=^0\n"));
-    assert!(rendered.contains("uri,tags,elements"));
+    assert!(rendered.starts_with("[1]{uri}:\n"));
+    assert!(rendered.contains("    tags[1]{name,location{line,column}}:"));
+    assert!(rendered.contains("    elements[1]:"));
+    assert!(!rendered.contains("@toon-world/sparse-v1"));
     assert_eq!(decoded(&rendered), original);
 }
 
@@ -107,8 +110,49 @@ fn compact_uses_bare_columns_and_quotes_only_ambiguous_paths() {
     ]);
     let rendered = sparse::encode(&original).unwrap().unwrap();
 
-    assert!(rendered.contains("uri,start_timestamp,profile.name,\"/a.b\""));
-    assert!(!rendered.contains("\"/uri\""));
+    assert!(rendered.contains("{uri,start_timestamp,profile{name},\"a.b\"}"));
+    assert!(!rendered.contains("\"uri\""));
+    assert_eq!(decoded(&rendered), original);
+}
+
+#[test]
+fn compact_renders_nested_object_columns_and_child_tables() {
+    let original = json!([
+        {
+            "uri": "a.feature",
+            "keyword": "Feature",
+            "elements": [{"id": 1, "name": "Login"}, {"id": 2, "name": "Logout"}]
+        },
+        {"uri": "b.feature", "elements": []}
+    ]);
+    let rendered = sparse::encode(&original).unwrap().unwrap();
+
+    assert_eq!(
+        rendered,
+        concat!(
+            "[2]{uri,keyword}:\n",
+            "  a.feature,Feature\n",
+            "    elements[2]{id,name}:\n",
+            "      1,Login\n",
+            "      2,Logout\n",
+            "  b.feature,~\n",
+            "    elements[0]:\n"
+        )
+    );
+    assert_eq!(decoded(&rendered), original);
+}
+
+#[test]
+fn compact_preserves_empty_and_absent_nested_objects() {
+    let original = json!([
+        {"id": 1, "profile": {}},
+        {"id": 2, "profile": {"name": "Ada"}},
+        {"id": 3}
+    ]);
+    let rendered = sparse::encode(&original).unwrap().unwrap();
+
+    assert!(rendered.starts_with("[3]{id,profile{name}}:\n"));
+    assert!(rendered.contains("  1,~\n    profile:\n"));
     assert_eq!(decoded(&rendered), original);
 }
 
@@ -119,6 +163,65 @@ fn compact_requires_toon_output() {
         .to_string();
 
     assert!(error.contains("--compact requires --to toon"));
+}
+
+#[test]
+fn compact_declines_conflicting_column_shapes() {
+    let original = json!([{"value": 1}, {"value": [1, 2]}]);
+
+    assert!(sparse::encode(&original).unwrap().is_none());
+}
+
+#[test]
+fn compact_round_trips_child_arrays_of_empty_objects() {
+    let original = json!([
+        {"id": 1, "items": [{}, {}]},
+        {"id": 2, "items": [{}]}
+    ]);
+
+    let sparse = sparse::encode(&original).unwrap().unwrap();
+    assert!(sparse.contains("items[2]{}:"));
+    assert_eq!(decoded(&sparse), original);
+    let rendered = output::encode_results_with_options(
+        &[value(&original.to_string())],
+        OutputFormat::Toon,
+        true,
+    )
+    .unwrap();
+    assert_eq!(decoded(&rendered), original);
+}
+
+#[test]
+fn compact_declines_schemas_deeper_than_its_decoder_limit() {
+    let mut nested = json!({"leaf": 1});
+    for _ in 0..64 {
+        nested = json!({"next": nested});
+    }
+
+    assert!(sparse::encode(&json!([nested])).unwrap().is_none());
+}
+
+#[test]
+fn sparse_detection_does_not_validate_standard_toon_indentation() {
+    let standard = format!("root:\n{}leaf: 1\n", " ".repeat(130));
+
+    assert!(sparse::decode(&standard).unwrap().is_none());
+}
+
+#[test]
+fn malformed_headerless_sparse_toon_reports_its_format() {
+    for rendered in [
+        "[2]{id,name}:\n  1,Ada\n",
+        "[1]{id,id}:\n  1,2\n",
+        "[1]{id}:\n    1\n",
+        "[1]{id}:\n  1\n      tags[0]:\n",
+    ] {
+        let error = input::parse_bytes(rendered.as_bytes(), InputFormat::SparseToon)
+            .expect_err("malformed sparse table must fail")
+            .to_string();
+
+        assert!(error.contains("error[parse:sparse-toon]"), "{error}");
+    }
 }
 
 #[test]

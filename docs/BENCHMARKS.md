@@ -1,6 +1,6 @@
 # Compact sparse-TOON benchmarks
 
-Compact mode is an experimental, lossless sparse-v1 codec. It recursively normalizes nested arrays into referenced tables or lists, flattens nested object leaves into JSON-Pointer columns, and uses `~` only for absent fields. Standard TOON remains the fallback whenever it has fewer tokens.
+Compact mode is an experimental, lossless, headerless sparse-TOON codec. It folds nested objects into TOON-style field groups, keeps row leaves flat, recursively writes arrays as indented child tables or standard TOON arrays, and uses `~` only for absent fields. Standard TOON remains the fallback whenever it has fewer tokens.
 
 The benchmark answers one narrow question: for the checked-in data, how much smaller is sparse-TOON than the current standard TOON encoder? It does not claim that the same reduction applies to all production data or every model tokenizer.
 
@@ -29,12 +29,12 @@ Every fixture is gated against token regression. Compact mode may fall back to s
 
 | fixture | normal bytes | normal tokens | compact bytes | compact tokens | byte reduction | token reduction |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| bench_sparse.json | 462 | 153 | 324 | 124 | 29.87% | 18.95% |
-| bench_dense.json | 305 | 101 | 203 | 72 | 33.44% | 28.71% |
-| bench_nested.json | 352 | 105 | 256 | 93 | 27.27% | 11.43% |
-| bench_cucumber.json | 1465 | 325 | 1465 | 325 | 0.00% | 0.00% |
+| bench_sparse.json | 462 | 153 | 252 | 99 | 45.45% | 35.29% |
+| bench_dense.json | 305 | 101 | 142 | 52 | 53.44% | 48.51% |
+| bench_nested.json | 352 | 105 | 185 | 68 | 47.44% | 35.24% |
+| bench_cucumber.json | 1465 | 325 | 1073 | 269 | 26.76% | 17.23% |
 
-For these fixtures, sparse-TOON reduced token estimates by **11.43% to 28.71%** when sparse layout won. The Cucumber fixture emits standard TOON because it is already the minimum-token representation; it does not regress or embed nested arrays as JSON cells. The primary sparse fixture reduced output from 153 to 124 tokens (18.95%). The results are stable because the fixtures, encoder, tokenizer, and dependency lockfile are committed.
+For these fixtures, sparse-TOON reduced token estimates by **17.23% to 48.51%**. The Cucumber fixture now uses headerless sparse output with recursively indented child tables, reducing 325 tokens to 269 without embedding nested arrays as JSON cells. The primary sparse fixture reduced output from 153 to 99 tokens (35.29%). The results are stable because the fixtures, encoder, tokenizer, and dependency lockfile are committed.
 
 ## Read results carefully
 

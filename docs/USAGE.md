@@ -71,21 +71,20 @@ Use structural HTML (the default) when tags, attributes, comments, or exact chil
 
 ## Experimental compact sparse-TOON
 
-Use `--compact` for nested or heterogeneous structured results. It writes experimental sparse-TOON v1 only when it beats ordinary TOON under `cl100k_base`; otherwise it emits ordinary TOON:
+Use `--compact` for nested or heterogeneous structured results. It writes the experimental headerless sparse-TOON dialect only when it beats ordinary TOON under `cl100k_base`; otherwise it emits ordinary TOON:
 
 ```bash
 toon-world records.json --compact > records.stoon
-head -3 records.stoon
-# @toon-world/sparse-v1
-# root=^0
-# ^0=[2]{id,profile.name,profile.team}:
-# 1,"Ada","platform"
+head -4 records.stoon
+# [2]{id,profile{name,team}}:
+#   1,Ada,platform
+#   2,Grace,~
 
 # Restore the exact JSON-compatible value.
 toon-world records.stoon --from sparse-toon --to json
 ```
 
-Nested objects become readable dot-path columns: `uri`, `profile.name`, and `match.location`. Keys that are ambiguous in dot form (for example `a.b` or `a/b`) retain a quoted JSON-Pointer path, so decode remains lossless. Nested arrays become referenced sparse tables or lists, so hooks, steps, tags, rows, arguments, and embeddings do not expand into a JSON cell. `~` means a property was absent; `null`, `""`, and `"~"` retain their normal JSON meanings. Existing root-table v1 files remain valid. `--compact` cannot be combined with `--to json` or `--to text`.
+Nested objects become field groups such as `profile{name,team}` and their primitive leaves stay flat in each row. Keys use normal TOON quoting, so literal dots and slashes remain lossless. Nested arrays become indented child tables or standard TOON child arrays beneath their owning row. `~` means a property was absent; `null`, `""`, and `"~"` retain their normal JSON meanings. Existing sparse-v1 files remain readable, but new output has no toon-world header or detached references. `--compact` cannot be combined with `--to json` or `--to text`.
 
 For a Cucumber report, compact mode recursively normalizes repeated child collections:
 

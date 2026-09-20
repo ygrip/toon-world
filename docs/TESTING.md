@@ -83,4 +83,4 @@ When a Markdown bug is reported, prefer a minimal source fragment plus an assert
 
 ## Compact sparse-TOON experiment
 
-The sparse-TOON suite covers lossless encode/decode, nested-object flattening, JSON-Pointer escaping, array leaves, absent/null/empty distinction, standard-TOON fallback, and CLI routing. `compact_benchmarks.rs` measures exact bytes and `cl100k_base` tokens for checked-in sparse, dense, and nested fixtures; only the sparse fixture has a required token reduction gate.
+The sparse-TOON suite covers headerless encode/decode, nested field groups, indented child arrays, TOON key quoting, absent/null/empty distinction, legacy sparse-v1 decoding, standard-TOON fallback, and CLI routing. `compact_benchmarks.rs` measures exact bytes and `cl100k_base` tokens for checked-in sparse, dense, nested, and Cucumber fixtures; sparse and Cucumber fixtures have required token-reduction gates.

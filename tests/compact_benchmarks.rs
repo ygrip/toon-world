@@ -56,3 +56,14 @@ fn compact_reduces_cl100k_tokens_for_sparse_fixture() {
 
     assert!(tokens(&compact) < tokens(&normal));
 }
+
+#[test]
+fn compact_reduces_cl100k_tokens_for_cucumber_fixture() {
+    let value = fixture("bench_cucumber.json");
+    let normal = render(&value, false);
+    let compact = render(&value, true);
+
+    assert!(compact.starts_with("[1]{uri,keyword}:"));
+    assert!(!compact.contains("@toon-world/sparse-v1"));
+    assert!(tokens(&compact) < tokens(&normal));
+}
