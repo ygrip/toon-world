@@ -3,8 +3,20 @@ use jaq_json::Val;
 use serde_json::Value;
 
 use crate::cli::OutputFormat;
+use crate::sparse;
 
 pub fn encode_results(values: &[Val], format: OutputFormat) -> Result<String> {
+    encode_results_with_options(values, format, false)
+}
+
+pub fn encode_results_with_options(
+    values: &[Val],
+    format: OutputFormat,
+    compact: bool,
+) -> Result<String> {
+    if compact && format != OutputFormat::Toon {
+        bail!("error[encode:sparse-toon]: --compact requires --to toon");
+    }
     match format {
         OutputFormat::Text => encode_text_results(values),
         OutputFormat::Json => {
@@ -13,6 +25,11 @@ pub fn encode_results(values: &[Val], format: OutputFormat) -> Result<String> {
         }
         OutputFormat::Toon => {
             let value = structured_result(values)?;
+            if compact {
+                if let Some(rendered) = sparse::encode(&value)? {
+                    return Ok(rendered);
+                }
+            }
             toon_format::encode_default(&value)
                 .map_err(|error| anyhow::anyhow!("error[encode:toon]: {error}"))
         }

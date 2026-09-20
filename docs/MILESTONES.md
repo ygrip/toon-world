@@ -10,7 +10,7 @@ Each implementation milestone is developed as a separate, stacked pull request s
 | 0.4 | `feat/markdown-adapter` | Markdown normalized document model + helpers | validated |
 | 0.5 | `feat/html-adapter` | HTML structural/semantic normalized models + helpers | validated |
 | 0.6 | `feat/context-stats` | byte-size statistics for input and rendered output | validated |
-| experimental | `feat/sparse-tables` | reversible sparse heterogeneous-table experiment | research milestone |
+| experimental | `feat/sparse-tables` | reversible flattened sparse-TOON experiment | implemented, benchmarked, opt-in |
 
 ## Verification policy
 

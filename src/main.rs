@@ -27,7 +27,7 @@ fn run() -> Result<()> {
     }
     let input_bytes = input.byte_len;
     let values = query::execute(&args.query, input.value)?;
-    let rendered = output::encode_results(&values, args.to)?;
+    let rendered = output::encode_results_with_options(&values, args.to, args.compact)?;
 
     let stdout = io::stdout();
     let mut stdout = stdout.lock();

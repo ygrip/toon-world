@@ -9,7 +9,7 @@ use jaq_json::Val;
 
 use crate::cli::InputFormat;
 use crate::diagnostics::Warning;
-use crate::{html, markdown};
+use crate::{html, markdown, sparse};
 
 pub struct ReadResult {
     pub value: Val,
@@ -78,6 +78,7 @@ pub fn detect_format(path: &Path) -> Option<InputFormat> {
         "toml" => Some(InputFormat::Toml),
         "xml" | "xhtml" => Some(InputFormat::Xml),
         "toon" => Some(InputFormat::Toon),
+        "sparse-toon" | "stoon" => Some(InputFormat::SparseToon),
         "md" | "markdown" => Some(InputFormat::Markdown),
         "html" | "htm" => Some(InputFormat::Html),
         _ => None,
@@ -99,6 +100,7 @@ pub fn parse_bytes_with_options(bytes: &[u8], format: InputFormat, semantic: boo
             .map_err(|error| anyhow!("error[parse:toml]: {error}")),
         InputFormat::Xml => parse_xml(as_utf8(bytes, "xml")?),
         InputFormat::Toon => parse_toon(as_utf8(bytes, "toon")?),
+        InputFormat::SparseToon => parse_sparse_toon(as_utf8(bytes, "sparse-toon")?),
         InputFormat::Markdown => markdown::parse(as_utf8(bytes, "markdown")?),
         InputFormat::Html => html::parse(as_utf8(bytes, "html")?, semantic),
     }
@@ -202,6 +204,17 @@ fn parse_toon(input: &str) -> Result<Val> {
         .map_err(|error| anyhow!("error[parse:toon]: {error}"))?;
     serde_json::from_value(value)
         .map_err(|error| anyhow!("error[parse:toon]: could not normalize decoded value: {error}"))
+}
+
+fn parse_sparse_toon(input: &str) -> Result<Val> {
+    let value = match sparse::decode(input)? {
+        Some(value) => value,
+        None => toon_format::decode_default(input)
+            .map_err(|error| anyhow!("error[parse:sparse-toon]: {error}"))?,
+    };
+    serde_json::from_value(value).map_err(|error| {
+        anyhow!("error[parse:sparse-toon]: could not normalize decoded value: {error}")
+    })
 }
 
 fn collapse_single(values: Vec<Val>) -> Val {

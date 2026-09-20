@@ -24,6 +24,7 @@ fn detects_known_extensions_case_insensitively() {
         ("data.toml", InputFormat::Toml),
         ("data.xml", InputFormat::Xml),
         ("data.xhtml", InputFormat::Xml),
+        ("data.stoon", InputFormat::SparseToon),
     ];
 
     for (path, expected) in cases {

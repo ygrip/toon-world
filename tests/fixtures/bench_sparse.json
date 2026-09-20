@@ -1,0 +1,7 @@
+[
+  {"id":101,"profile":{"name":"Ada","team":"platform"},"active":true,"roles":["admin","editor"]},
+  {"id":102,"profile":{"name":"Grace"},"ticket":"OPS-14"},
+  {"id":103,"profile":{"name":"Linus","team":"kernel"},"active":true,"region":"eu-west"},
+  {"id":104,"profile":{"name":"Margaret"},"ticket":"OPS-19","region":"us-east"},
+  {"id":105,"profile":{"name":"Barbara","team":"research"},"active":false,"roles":[]}
+]

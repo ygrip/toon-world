@@ -47,6 +47,29 @@ Build and install from a checkout:
 
 Both installers use an existing Rust toolchain or install it with official rustup, build a release binary, and copy it to the user-local bin directory. They print PATH guidance instead of modifying shell profiles.
 
+## Quick usage
+
+```bash
+# Query any supported input; extensions infer the parser.
+toon-world users.json -q '.users[] | select(.active) | .name' --to text
+toon-world events.jsonl -q '.[] | select(.level == "warn") | .message' --to text
+
+# Ask for byte reduction statistics on stderr.
+toon-world users.json --stats
+
+# Experimental: flatten sparse object rows into compact sparse-TOON.
+toon-world records.json --compact > records.stoon
+toon-world records.stoon --from sparse-toon --to json
+```
+
+Run [`examples/usage.sh`](examples/usage.sh) for the same flow against checked-in sample files.
+
+### Experimental compact sparse-TOON
+
+`--compact` applies to root arrays of objects and falls back to ordinary TOON for other values. Nested objects become JSON-Pointer columns, arrays remain values, and the versioned output distinguishes absent (`~`), `null`, empty strings, and literal `"~"`. Decode it explicitly with `--from sparse-toon`; ordinary `--to toon` remains standard TOON.
+
+See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) for reproducible byte and cl100k token measurements.
+
 ## HTML and statistics
 
 HTML defaults to a structural DOM-shaped model that retains tags, attributes, ordered children, scripts, and styles. Use `--semantic` for compact agent-oriented content that retains title, metadata, sections, code, lists, tables, links, images, and forms while omitting script/style payloads.

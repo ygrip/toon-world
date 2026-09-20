@@ -1,0 +1,5 @@
+[
+  {"id":1,"profile":{"name":"Ada","team":"platform"},"active":true,"region":"eu-west"},
+  {"id":2,"profile":{"name":"Grace","team":"compiler"},"active":false,"region":"us-east"},
+  {"id":3,"profile":{"name":"Linus","team":"kernel"},"active":true,"region":"ap-south"}
+]

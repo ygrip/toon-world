@@ -55,7 +55,7 @@ Do not add `--keep`, `--drop`, or `--drop-null`: jq already expresses those tran
 
 ## Experimental — sparse heterogeneous tables
 
-Research a reversible extension that distinguishes missing, null, and empty values while preserving row order. Only stabilize it if representative size/token benchmarks show material gains and decoding remains reliable.
+Implemented as an opt-in sparse-TOON v1 experiment. It recursively flattens object leaves into stable JSON-Pointer columns, keeps arrays as values, distinguishes missing, null, and empty values, and preserves row order. It remains experimental until broader production-shaped benchmarks validate the current fixture results.
 
 ## Release shape
 

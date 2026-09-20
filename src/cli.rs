@@ -13,6 +13,7 @@ pub enum InputFormat {
     Toon,
     Markdown,
     Html,
+    SparseToon,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -56,6 +57,10 @@ pub struct Args {
     /// Emit machine-readable byte statistics to stderr without contaminating stdout.
     #[arg(long)]
     pub stats: bool,
+
+    /// Encode root arrays of objects with the experimental sparse-TOON codec.
+    #[arg(long)]
+    pub compact: bool,
 
     /// jq-compatible query. Defaults to the identity filter.
     #[arg(short = 'q', long, default_value = ".")]
