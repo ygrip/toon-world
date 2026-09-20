@@ -7,9 +7,11 @@ mod support;
 fn main() {
     let encoder = cl100k_base().expect("cl100k_base must initialize");
     println!("<!-- BEGIN GENERATED COMPACT BENCHMARKS -->");
-    println!("| fixture | normal bytes | compact bytes | byte reduction | normal cl100k | compact cl100k | cl100k reduction |");
-    println!("| --- | ---: | ---: | ---: | ---: | ---: | ---: |");
+    println!("### Output size");
+    println!("| fixture | input JSON bytes | standard TOON bytes | compact TOON bytes | compact vs JSON | compact vs standard TOON |");
+    println!("| --- | ---: | ---: | ---: | ---: | ---: |");
     for fixture in support::fixtures() {
+        let input = serde_json::to_string(&fixture.value).expect("input JSON must encode");
         let normal =
             toon_format::encode_default(&fixture.value).expect("standard TOON must encode");
         let sparse = sparse::encode(&fixture.value).expect("sparse encoding must not fail");
@@ -17,14 +19,36 @@ fn main() {
             Some(sparse) if sparse.len() < normal.len() => sparse,
             _ => normal.clone(),
         };
+        println!(
+            "| {} | {} | {} | {} | {:.2}% | {:.2}% |",
+            fixture.name,
+            input.len(),
+            normal.len(),
+            compact.len(),
+            reduction(input.len(), compact.len()),
+            reduction(normal.len(), compact.len()),
+        );
+    }
+    println!();
+    println!("### `cl100k_base` reference");
+    println!("| fixture | input JSON tokens | standard TOON tokens | compact TOON tokens | compact vs JSON | compact vs standard TOON |");
+    println!("| --- | ---: | ---: | ---: | ---: | ---: |");
+    for fixture in support::fixtures() {
+        let input = serde_json::to_string(&fixture.value).expect("input JSON must encode");
+        let normal =
+            toon_format::encode_default(&fixture.value).expect("standard TOON must encode");
+        let sparse = sparse::encode(&fixture.value).expect("sparse encoding must not fail");
+        let compact = match sparse {
+            Some(sparse) if sparse.len() < normal.len() => sparse,
+            _ => normal.clone(),
+        };
+        let input_tokens = encoder.encode_with_special_tokens(&input).len();
         let normal_tokens = encoder.encode_with_special_tokens(&normal).len();
         let compact_tokens = encoder.encode_with_special_tokens(&compact).len();
         println!(
-            "| {} | {} | {} | {:.2}% | {normal_tokens} | {compact_tokens} | {:.2}% |",
+            "| {} | {input_tokens} | {normal_tokens} | {compact_tokens} | {:.2}% | {:.2}% |",
             fixture.name,
-            normal.len(),
-            compact.len(),
-            reduction(normal.len(), compact.len()),
+            reduction(input_tokens, compact_tokens),
             reduction(normal_tokens, compact_tokens),
         );
     }
