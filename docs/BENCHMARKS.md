@@ -124,13 +124,14 @@ cargo run --release --example compact_memory_benchmark
 
 ### Snapshot results
 
-Measured on macOS 26.6.2 arm64 with Rust 1.93.0. CPU uses Criterion’s median from 10 samples with 10 ms warmup/measurement; allocations use release mode. CPU results vary by hardware and load.
+Measured on macOS 26.6.2 arm64 with Rust 1.93.0. CPU uses Criterion’s median from 100 samples after a 3 s warmup with a 5 s target measurement; allocations use release mode. CPU results vary by hardware and load.
 
 | Fixture | Standard TOON CPU | Sparse candidate CPU | Complete compact CPU | Allocations: standard / sparse / compact | Bytes allocated: standard / sparse / compact |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `flat-r100-missing30pct` | 398 µs | 126 µs | 526 µs | 8,535 / 2,145 / 10,680 | 732,485 / 81,536 / 814,021 |
-| `nested-r100-missing30pct` | 486 µs | 193 µs | 672 µs | 11,802 / 3,884 / 15,686 | 717,994 / 242,777 / 960,771 |
-| `child-tables-r100-missing30pct` | 774 µs | 383 µs | 1.15 ms | 19,908 / 8,807 / 28,715 | 1,362,478 / 493,783 / 1,856,261 |
+| `flat-r100-missing30pct` | 390 µs | 140 µs | 529 µs | 8,535 / 2,145 / 10,680 | 732,485 / 81,664 / 814,149 |
+| `nested-r100-missing30pct` | 478 µs | 195 µs | 671 µs | 11,802 / 3,884 / 15,686 | 717,994 / 252,409 / 970,403 |
+| `child-tables-r100-missing30pct` | 763 µs | 376 µs | 1.14 ms | 19,908 / 8,018 / 27,926 | 1,362,478 / 493,305 / 1,855,783 |
+| `root-object-r100-missing30pct` | 336 µs | 155 µs | 496 µs | 9,027 / 4,288 / 13,315 | 563,054 / 190,468 / 753,522 |
 
 Complete compact selection includes standard TOON encoding, sparse candidate encoding, and byte comparison. It is intentionally more expensive than either single encoder.
 
