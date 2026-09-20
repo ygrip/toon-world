@@ -1,0 +1,45 @@
+tests/compact_matrix.rs
+  91e60aaa6e426155 1-21
+scripts/benchmark.sh
+  91e60aaa6e426155 5-49
+tests/sparse_properties.rs
+  91e60aaa6e426155 1-44
+docs/BENCHMARKS.md
+  91e60aaa6e426155 3,5,7,11,14,16,18-19,21-48,50,52,54-56,58,60-62,64,66-69
+src/output.rs
+  91e60aaa6e426155 32
+Cargo.toml
+  91e60aaa6e426155 24-26,28-32
+examples/compact_benchmark.rs
+  91e60aaa6e426155 2,4-5,9-10,12-19,23-28,31,35-39
+tests/compact_benchmarks.rs
+  91e60aaa6e426155 33,36,38
+README.md
+  91e60aaa6e426155 70
+examples/compact_memory_benchmark.rs
+  91e60aaa6e426155 1-42
+tests/sparse.rs
+  91e60aaa6e426155 47,53,202-248
+src/sparse.rs
+  91e60aaa6e426155 18,21-35,82-83,88-91,98,102-117,121-123,135,144,148,155-160,162-171,178-185,187-193,203,212,219,242-243,272,282-284,290-301,379-381,425,472,492,525,613,645,647
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.23",
+  "base_commit_sha": "3295aee6c5193210bab3f9ba1a5aff8248aa1ec4",
+  "prompts": {
+    "91e60aaa6e426155": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0bf50-7927-73b0-85bd-e7922877e189",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "ygrip <yunaz.gilang@gmail.com>",
+      "messages": [],
+      "total_additions": 404,
+      "total_deletions": 178,
+      "accepted_lines": 404,
+      "overriden_lines": 0
+    }
+  }
+}
