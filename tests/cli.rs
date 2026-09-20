@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::path::PathBuf;
 
 use assert_cmd::Command;
 use tempfile::NamedTempFile;
@@ -12,6 +13,35 @@ fn input_file(contents: &str) -> NamedTempFile {
 fn run_stdin(args: &[&str], input: &str) -> std::process::Output {
     let mut command = Command::cargo_bin("toon-world").unwrap();
     command.args(args).write_stdin(input).output().unwrap()
+}
+
+fn fixture(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join(name)
+}
+
+#[test]
+fn queries_a_checked_in_json_sample_file() {
+    let file = fixture("users.json");
+    let output = Command::cargo_bin("toon-world")
+        .unwrap()
+        .args([
+            file.to_str().unwrap(),
+            "-q",
+            ".users[] | select(.active) | .name",
+            "--to",
+            "text",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "Ada Lovelace\nLinus Torvalds\n"
+    );
 }
 
 #[test]
@@ -47,7 +77,10 @@ fn queries_filters_and_projects_json() {
         .unwrap();
 
     assert!(output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "{\"id\":1,\"name\":\"Ada\"}\n");
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "{\"id\":1,\"name\":\"Ada\"}\n"
+    );
 }
 
 #[test]
@@ -129,10 +162,7 @@ fn emits_multiple_text_results_line_by_line() {
 
 #[test]
 fn empty_text_result_stream_emits_no_output() {
-    let output = run_stdin(
-        &["-q", ".[] | select(. > 10)", "--to", "text"],
-        "[1,2,3]",
-    );
+    let output = run_stdin(&["-q", ".[] | select(. > 10)", "--to", "text"], "[1,2,3]");
 
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
@@ -140,10 +170,7 @@ fn empty_text_result_stream_emits_no_output() {
 
 #[test]
 fn emits_empty_array_for_empty_structured_result_stream() {
-    let output = run_stdin(
-        &["-q", ".[] | select(. > 10)", "--to", "json"],
-        "[1,2,3]",
-    );
+    let output = run_stdin(&["-q", ".[] | select(. > 10)", "--to", "json"], "[1,2,3]");
 
     assert!(output.status.success());
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "[]\n");
