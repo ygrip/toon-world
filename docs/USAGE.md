@@ -71,7 +71,7 @@ Use structural HTML (the default) when tags, attributes, comments, or exact chil
 
 ## Experimental compact sparse-TOON
 
-Use `--compact` for nested or heterogeneous structured results. It writes the experimental headerless sparse-TOON dialect only when it beats ordinary TOON under `cl100k_base`; otherwise it emits ordinary TOON:
+Use `--compact` for nested or heterogeneous structured results. It writes the experimental headerless sparse-TOON dialect only when its UTF-8 output is smaller than ordinary TOON; otherwise it emits ordinary TOON:
 
 ```bash
 toon-world records.json --compact > records.stoon

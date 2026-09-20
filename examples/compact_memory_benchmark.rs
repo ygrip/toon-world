@@ -1,7 +1,7 @@
 use std::alloc::System;
 
 use stats_alloc::{Region, Stats, StatsAlloc, INSTRUMENTED_SYSTEM};
-use toon_world::sparse;
+use toon_world::{output, sparse};
 
 #[path = "../benches/support/mod.rs"]
 mod support;
@@ -22,10 +22,11 @@ fn main() {
         report(&fixture.name, "compact", || {
             let standard =
                 toon_format::encode_default(&fixture.value).expect("standard TOON must encode");
-            match sparse::encode(&fixture.value).expect("sparse encoding must not fail") {
-                Some(sparse) if sparse.len() < standard.len() => sparse,
-                _ => standard,
-            }
+            output::select_compact_toon(
+                standard,
+                sparse::encode(&fixture.value).expect("sparse encoding must not fail"),
+            )
+            .into_rendered()
         });
     }
 }

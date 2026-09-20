@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use serde_json::Value;
-use toon_world::sparse;
+use toon_world::{output, sparse};
 
 mod support;
 
@@ -10,10 +10,11 @@ fn standard(value: &Value) -> String {
 
 fn compact(value: &Value) -> String {
     let standard = standard(value);
-    match sparse::encode(value).expect("sparse encoding must not fail") {
-        Some(sparse) if sparse.len() < standard.len() => sparse,
-        _ => standard,
-    }
+    output::select_compact_toon(
+        standard,
+        sparse::encode(value).expect("sparse encoding must not fail"),
+    )
+    .into_rendered()
 }
 
 fn benchmark(c: &mut Criterion) {

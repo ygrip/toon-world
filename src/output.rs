@@ -5,6 +5,40 @@ use serde_json::Value;
 use crate::cli::OutputFormat;
 use crate::sparse;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompactToonSelection {
+    Standard(String),
+    Sparse(String),
+}
+
+impl CompactToonSelection {
+    pub fn rendered(&self) -> &str {
+        match self {
+            Self::Standard(rendered) | Self::Sparse(rendered) => rendered,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Standard(_) => "standard",
+            Self::Sparse(_) => "sparse",
+        }
+    }
+
+    pub fn into_rendered(self) -> String {
+        match self {
+            Self::Standard(rendered) | Self::Sparse(rendered) => rendered,
+        }
+    }
+}
+
+pub fn select_compact_toon(standard: String, sparse: Option<String>) -> CompactToonSelection {
+    match sparse {
+        Some(sparse) if sparse.len() < standard.len() => CompactToonSelection::Sparse(sparse),
+        _ => CompactToonSelection::Standard(standard),
+    }
+}
+
 pub fn encode_results(values: &[Val], format: OutputFormat) -> Result<String> {
     encode_results_with_options(values, format, false)
 }
@@ -28,11 +62,7 @@ pub fn encode_results_with_options(
             let standard = toon_format::encode_default(&value)
                 .map_err(|error| anyhow::anyhow!("error[encode:toon]: {error}"))?;
             if compact {
-                if let Some(rendered) = sparse::encode(&value)? {
-                    if rendered.len() < standard.len() {
-                        return Ok(rendered);
-                    }
-                }
+                return Ok(select_compact_toon(standard, sparse::encode(&value)?).into_rendered());
             }
             Ok(standard)
         }

@@ -251,7 +251,6 @@ fn compact_declines_empty_keys() {
 }
 
 #[test]
-#[test]
 fn compact_declines_non_object_child_arrays() {
     let value = json!([{"items": ["value", {"name": "Ada"}]}]);
 
