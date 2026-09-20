@@ -1,0 +1,3 @@
+{"event":"login","user_id":101,"success":true}
+{"event":"export","user_id":101,"success":true}
+{"event":"login","user_id":102,"success":false}

@@ -45,6 +45,30 @@ fn queries_a_checked_in_json_sample_file() {
 }
 
 #[test]
+fn stats_for_a_checked_in_file_stay_on_stderr() {
+    let file = fixture("users.json");
+    let output = Command::cargo_bin("toon-world")
+        .unwrap()
+        .args([
+            file.to_str().unwrap(),
+            "-q",
+            ".users[0].name",
+            "--to",
+            "text",
+            "--stats",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "Ada Lovelace\n");
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "{\"input_bytes\":329,\"output_bytes\":12,\"reduction_percent\":96.35}\n"
+    );
+}
+
+#[test]
 fn queries_a_checked_in_jsonl_sample_file_with_extension_inference() {
     let file = fixture("events.jsonl");
     let output = Command::cargo_bin("toon-world")

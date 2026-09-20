@@ -13,9 +13,15 @@ cargo build --release
 
 A branch is not considered locally verified until all four commands succeed.
 
+## Checked-in sample files
+
+`tests/fixtures/` contains representative JSON, NDJSON, CSV, YAML, TOML, XML fragment, TOON, Markdown, and HTML files. `sample_files.rs` parses and queries each file, including XML fragment order and semantic HTML. This prevents regressions from tests that only exercise inline or temporary strings.
+
+`--stats` coverage asserts exact input/output byte accounting and stderr-only output for a checked-in JSON sample.
+
 ## Inherited coverage
 
-Milestone 0.4 inherits the structured/query coverage from earlier milestones, including:
+Later milestones inherit the structured/query coverage from earlier milestones, including:
 
 - jq query and output boundaries;
 - file/stdin/CLI error behavior;

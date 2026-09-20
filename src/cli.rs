@@ -53,6 +53,10 @@ pub struct Args {
     #[arg(long)]
     pub semantic: bool,
 
+    /// Emit machine-readable byte statistics to stderr without contaminating stdout.
+    #[arg(long)]
+    pub stats: bool,
+
     /// jq-compatible query. Defaults to the identity filter.
     #[arg(short = 'q', long, default_value = ".")]
     pub query: String,
