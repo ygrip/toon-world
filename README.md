@@ -84,6 +84,9 @@ All formats support file/stdin, and raw values use `--data`:
 # file
 toon-world users.csv
 
+# JSON Lines file (.jsonl is inferred as NDJSON)
+toon-world events.jsonl -q '.[] | select(.level == "warn")'
+
 # stdin
 cat users.csv | toon-world --from csv
 

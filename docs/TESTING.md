@@ -40,7 +40,8 @@ Adapter tests call `input::parse_bytes` directly so a parser regression is disti
 | explicit `--from` override | yes |
 | unknown extension JSON fallback | yes |
 | non-JSON stdin with `--from` | yes |
-| NDJSON preserves line order | yes |
+| NDJSON/JSONL preserves line order | yes |
+| checked-in `.jsonl` file is inferred and queried through the CLI | yes |
 | NDJSON tolerates surrounding whitespace | yes |
 | malformed NDJSON labeled correctly | yes |
 | CSV header-to-object mapping | yes |
