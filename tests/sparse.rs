@@ -44,13 +44,13 @@ fn compact_distinguishes_absent_null_empty_and_literal_marker() {
 #[test]
 fn compact_escapes_pointer_keys_and_references_nested_arrays() {
     let original = json!([
-        {"a/b": {"til~de": "value"}, "items": [1, {"name": "Ada"}]},
+        {"a/b": {"til~de": "value"}, "items": [{"name": "Ada"}]},
         {"a/b": {"til~de": "other"}, "items": []}
     ]);
     let rendered = sparse::encode(&original).unwrap().unwrap();
 
     assert!(rendered.starts_with("[2]{\"a/b\"{\"til~de\"}}:\n"));
-    assert!(rendered.contains("items[2]:"));
+    assert!(rendered.contains("items[1]{name}:"));
     assert!(rendered.contains("items[0]:"));
     assert!(!rendered.contains("root=^") && !rendered.contains("^0="));
     assert_eq!(decoded(&rendered), original);
@@ -100,6 +100,16 @@ fn legacy_v1_table_still_decodes() {
         decoded(rendered),
         json!([{"id": 1, "name": "Ada"}, {"id": 2}])
     );
+}
+
+#[test]
+fn legacy_recursive_sparse_rejects_oversized_row_count_without_preallocating() {
+    let rendered = "@toon-world/sparse-v1\nroot=^0\n^0=[1000000000]{id}:\n";
+    let error = input::parse_bytes(rendered.as_bytes(), InputFormat::SparseToon)
+        .expect_err("oversized recursive table must fail without huge allocation")
+        .to_string();
+
+    assert!(error.contains("missing recursive table row"));
 }
 
 #[test]
@@ -202,6 +212,53 @@ fn compact_declines_schemas_deeper_than_its_decoder_limit() {
 }
 
 #[test]
+fn compact_round_trips_forty_seven_nested_objects() {
+    let mut nested = json!({"leaf": "value"});
+    for _ in 0..47 {
+        nested = json!({"next": nested});
+    }
+    let value = json!([{"tree": nested}]);
+
+    let rendered = sparse::encode(&value).unwrap().unwrap();
+    assert_eq!(decoded(&rendered), value);
+}
+
+#[test]
+fn compact_preserves_first_seen_order_for_wide_schemas() {
+    let rows = (0..100)
+        .map(|row| {
+            let mut object = serde_json::Map::new();
+            object.insert("id".to_owned(), json!(row));
+            for column in 0..100 {
+                if (row + column) % 2 == 0 {
+                    object.insert(format!("column_{column}"), json!(row + column));
+                }
+            }
+            Value::Object(object)
+        })
+        .collect::<Vec<_>>();
+    let rendered = sparse::encode(&Value::Array(rows)).unwrap().unwrap();
+
+    assert!(rendered.starts_with("[100]{id,column_0,column_2,column_4"));
+    assert!(rendered.contains(",column_1,column_3,column_5"));
+}
+
+#[test]
+fn compact_declines_empty_keys() {
+    let value = json!([{"": [[], "nested"], "profile": {"": null}}]);
+
+    assert!(sparse::encode(&value).unwrap().is_none());
+}
+
+#[test]
+#[test]
+fn compact_declines_non_object_child_arrays() {
+    let value = json!([{"items": ["value", {"name": "Ada"}]}]);
+
+    assert!(sparse::encode(&value).unwrap().is_none());
+}
+
+#[test]
 fn sparse_detection_does_not_validate_standard_toon_indentation() {
     let standard = format!("root:\n{}leaf: 1\n", " ".repeat(130));
 
@@ -234,15 +291,4 @@ fn malformed_sparse_toon_reports_its_format() {
     .to_string();
 
     assert!(error.contains("error[parse:sparse-toon]"));
-}
-
-
-#[test]
-fn legacy_recursive_sparse_rejects_oversized_row_count_without_preallocating() {
-    let rendered = "@toon-world/sparse-v1\nroot=^0\n^0=[1000000000]{id}:\n";
-    let error = input::parse_bytes(rendered.as_bytes(), InputFormat::SparseToon)
-        .expect_err("oversized recursive table must fail without huge allocation")
-        .to_string();
-
-    assert!(error.contains("missing recursive table row"));
 }

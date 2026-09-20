@@ -67,7 +67,7 @@ For format-by-format examples, input/output rules, common queries, and troublesh
 
 ### Experimental compact sparse-TOON
 
-`--compact` uses an experimental headerless sparse-TOON dialect when it has fewer `cl100k_base` tokens than ordinary TOON. Nested object columns fold into TOON-style field groups such as `profile{name,team}`, while each row stays flat. Nested arrays appear as indented child tables beneath their owning row. `~` means absent; `null`, empty strings, and literal `"~"` stay distinct. Decode with `--from sparse-toon`; ordinary `--to toon` remains standard TOON. Legacy `@toon-world/sparse-v1` files still decode.
+`--compact` uses an experimental headerless sparse-TOON dialect when its UTF-8 output is smaller than ordinary TOON. Nested object columns fold into TOON-style field groups such as `profile{name,team}`, while each row stays flat. Homogeneous child-object arrays appear as indented child tables; other child-array shapes fall back to standard TOON. `~` means absent; `null`, empty strings, and literal `"~"` stay distinct. Decode with `--from sparse-toon`; ordinary `--to toon` remains standard TOON. Legacy `@toon-world/sparse-v1` files still decode.
 
 See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) for reproducible byte and cl100k token measurements, fixture descriptions, and interpretation guidance.
 

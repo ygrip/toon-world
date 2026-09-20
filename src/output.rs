@@ -29,7 +29,7 @@ pub fn encode_results_with_options(
                 .map_err(|error| anyhow::anyhow!("error[encode:toon]: {error}"))?;
             if compact {
                 if let Some(rendered) = sparse::encode(&value)? {
-                    if sparse::has_fewer_tokens(&rendered, &standard)? {
+                    if rendered.len() < standard.len() {
                         return Ok(rendered);
                     }
                 }

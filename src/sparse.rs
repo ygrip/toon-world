@@ -15,7 +15,24 @@ struct Field {
 #[derive(Clone, Debug)]
 enum FieldKind {
     Leaf,
-    Object(Vec<Field>),
+    Object(Schema),
+}
+
+#[derive(Clone, Debug, Default)]
+struct Schema {
+    fields: Vec<Field>,
+    indices: HashMap<String, usize>,
+}
+
+impl Schema {
+    fn from_fields(fields: Vec<Field>) -> Self {
+        let indices = fields
+            .iter()
+            .enumerate()
+            .map(|(index, field)| (field.key.clone(), index))
+            .collect();
+        Self { fields, indices }
+    }
 }
 
 #[derive(Debug)]
@@ -59,41 +76,51 @@ pub fn encode(value: &Value) -> Result<Option<String>> {
         };
         render_table(None, values, &schema, 0, &mut output)?;
     }
-    if !matches!(decode(&output), Ok(Some(decoded)) if decoded == *value) {
-        return Ok(None);
-    }
     Ok(Some(output))
 }
 
-pub fn has_fewer_tokens(candidate: &str, standard: &str) -> Result<bool> {
-    let encoder = tiktoken_rs::cl100k_base()
-        .context("error[encode:sparse-toon]: could not load cl100k tokenizer")?;
-    Ok(encoder.encode_with_special_tokens(candidate).len()
-        < encoder.encode_with_special_tokens(standard).len())
-}
-
-fn schema_for_rows(values: &[Value]) -> Result<Option<Vec<Field>>> {
-    let mut fields = Vec::new();
+fn schema_for_rows(values: &[Value]) -> Result<Option<Schema>> {
+    let mut schema = Schema::default();
     for value in values {
         let object = value
             .as_object()
             .ok_or_else(|| anyhow!("error[encode:sparse-toon]: table row must be an object"))?;
-        if !merge_schema(&mut fields, object, 0)? {
+        if has_unsupported_keys(value) {
+            return Ok(None);
+        }
+        if !merge_schema(&mut schema, object, 0)? {
             return Ok(None);
         }
     }
     if values.iter().any(|value| {
         value
             .as_object()
-            .is_some_and(|object| !row_matches_schema(&fields, object))
+            .is_some_and(|object| !row_matches_schema(&schema, object))
     }) {
         return Ok(None);
     }
-    Ok((!fields.is_empty()).then_some(fields))
+    Ok((!schema.fields.is_empty()).then_some(schema))
 }
 
-fn row_matches_schema(fields: &[Field], object: &Map<String, Value>) -> bool {
-    fields
+fn has_unsupported_keys(value: &Value) -> bool {
+    match value {
+        Value::Array(values) => {
+            let homogeneous = values.iter().all(Value::is_object)
+                || values
+                    .iter()
+                    .all(|value| !value.is_array() && !value.is_object());
+            !homogeneous || values.iter().any(has_unsupported_keys)
+        }
+        Value::Object(object) => object
+            .iter()
+            .any(|(key, value)| key.is_empty() || has_unsupported_keys(value)),
+        _ => false,
+    }
+}
+
+fn row_matches_schema(schema: &Schema, object: &Map<String, Value>) -> bool {
+    schema
+        .fields
         .iter()
         .all(|field| match (&field.kind, object.get(&field.key)) {
             (_, None) => true,
@@ -105,11 +132,7 @@ fn row_matches_schema(fields: &[Field], object: &Map<String, Value>) -> bool {
         })
 }
 
-fn merge_schema(
-    fields: &mut Vec<Field>,
-    object: &Map<String, Value>,
-    depth: usize,
-) -> Result<bool> {
+fn merge_schema(schema: &mut Schema, object: &Map<String, Value>, depth: usize) -> Result<bool> {
     if depth >= MAX_DEPTH {
         return Ok(false);
     }
@@ -118,63 +141,57 @@ fn merge_schema(
             Value::Array(_) => continue,
             Value::Object(map) if map.is_empty() => continue,
             Value::Object(map) => {
-                let mut nested = Vec::new();
+                let mut nested = Schema::default();
                 if !merge_schema(&mut nested, map, depth + 1)? {
                     return Ok(false);
                 }
-                if nested.is_empty() {
+                if nested.fields.is_empty() {
                     continue;
                 }
                 FieldKind::Object(nested)
             }
             _ => FieldKind::Leaf,
         };
-        match fields.iter_mut().find(|field| field.key == *key) {
-            Some(Field {
-                kind: FieldKind::Object(existing),
-                ..
-            }) => {
-                let FieldKind::Object(observed) = observed else {
-                    return Ok(false);
-                };
-                if !merge_fields(existing, observed) {
-                    return Ok(false);
+        match schema.indices.get(key).copied() {
+            Some(index) => match (&mut schema.fields[index].kind, observed) {
+                (FieldKind::Object(existing), FieldKind::Object(observed)) => {
+                    if !merge_fields(existing, observed) {
+                        return Ok(false);
+                    }
                 }
+                (FieldKind::Leaf, FieldKind::Leaf) => {}
+                _ => return Ok(false),
+            },
+            None => {
+                let index = schema.fields.len();
+                schema.indices.insert(key.clone(), index);
+                schema.fields.push(Field {
+                    key: key.clone(),
+                    kind: observed,
+                });
             }
-            Some(Field {
-                kind: FieldKind::Leaf,
-                ..
-            }) if matches!(observed, FieldKind::Leaf) => {}
-            Some(_) => return Ok(false),
-            None => fields.push(Field {
-                key: key.clone(),
-                kind: observed,
-            }),
         }
     }
     Ok(true)
 }
 
-fn merge_fields(existing: &mut Vec<Field>, observed: Vec<Field>) -> bool {
-    for field in observed {
-        match existing.iter_mut().find(|item| item.key == field.key) {
-            Some(Field {
-                kind: FieldKind::Object(current),
-                ..
-            }) => {
-                let FieldKind::Object(nested) = field.kind else {
-                    return false;
-                };
-                if !merge_fields(current, nested) {
-                    return false;
+fn merge_fields(existing: &mut Schema, observed: Schema) -> bool {
+    for field in observed.fields {
+        match existing.indices.get(&field.key).copied() {
+            Some(index) => match (&mut existing.fields[index].kind, field.kind) {
+                (FieldKind::Object(current), FieldKind::Object(nested)) => {
+                    if !merge_fields(current, nested) {
+                        return false;
+                    }
                 }
+                (FieldKind::Leaf, FieldKind::Leaf) => {}
+                _ => return false,
+            },
+            None => {
+                let index = existing.fields.len();
+                existing.indices.insert(field.key.clone(), index);
+                existing.fields.push(field);
             }
-            Some(Field {
-                kind: FieldKind::Leaf,
-                ..
-            }) if matches!(field.kind, FieldKind::Leaf) => {}
-            Some(_) => return false,
-            None => existing.push(field),
         }
     }
     true
@@ -183,7 +200,7 @@ fn merge_fields(existing: &mut Vec<Field>, observed: Vec<Field>) -> bool {
 fn render_table(
     key: Option<&str>,
     values: &[Value],
-    fields: &[Field],
+    schema: &Schema,
     indent: usize,
     output: &mut String,
 ) -> Result<()> {
@@ -192,14 +209,14 @@ fn render_table(
         output.push_str(&render_key(key)?);
     }
     output.push_str(&format!("[{}]{{", values.len()));
-    render_fields(fields, output)?;
+    render_fields(schema, output)?;
     output.push_str("}:\n");
     for value in values {
         let object = value
             .as_object()
             .ok_or_else(|| anyhow!("error[encode:sparse-toon]: table row must be an object"))?;
         let mut cells = Vec::new();
-        collect_cells(fields, object, &mut cells)?;
+        collect_cells(&schema.fields, object, &mut cells)?;
         output.push_str(&" ".repeat(indent + 2));
         output.push_str(&cells.join(","));
         output.push('\n');
@@ -222,8 +239,8 @@ fn render_empty_object_table(
     Ok(())
 }
 
-fn render_fields(fields: &[Field], output: &mut String) -> Result<()> {
-    for (index, field) in fields.iter().enumerate() {
+fn render_fields(schema: &Schema, output: &mut String) -> Result<()> {
+    for (index, field) in schema.fields.iter().enumerate() {
         if index > 0 {
             output.push(',');
         }
@@ -252,7 +269,7 @@ fn collect_cells(
                 Some(_) => bail!("error[encode:sparse-toon]: conflicting table row shape"),
             },
             FieldKind::Object(nested) => match object.get(&field.key) {
-                Some(Value::Object(child)) => collect_cells(nested, child, cells)?,
+                Some(Value::Object(child)) => collect_cells(&nested.fields, child, cells)?,
                 None => cells.extend((0..leaf_count(nested)).map(|_| "~".to_owned())),
                 Some(_) => bail!("error[encode:sparse-toon]: conflicting table row shape"),
             },
@@ -262,12 +279,26 @@ fn collect_cells(
 }
 
 fn render_primitive(value: &Value) -> Result<String> {
+    if let Value::String(string) = value {
+        return render_string(string);
+    }
     let rendered = toon_format::encode_default(value)
         .map_err(|error| anyhow!("error[encode:sparse-toon]: {error}"))?;
-    if matches!(value, Value::String(string) if string == "~") {
-        return Ok("\"~\"".to_owned());
-    }
     Ok(rendered)
+}
+
+fn render_string(value: &str) -> Result<String> {
+    let mut characters = value.chars();
+    let bare = matches!(characters.next(), Some(first) if first.is_ascii_alphabetic() || first == '_')
+        && characters.all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.' | '/' | '@')
+        })
+        && !matches!(value, "null" | "true" | "false" | "~");
+    if bare {
+        Ok(value.to_owned())
+    } else {
+        serde_json::to_string(value).context("error[encode:sparse-toon]: invalid string value")
+    }
 }
 
 fn render_key(key: &str) -> Result<String> {
@@ -345,8 +376,9 @@ fn render_array_attachment(
     Ok(())
 }
 
-fn leaf_count(fields: &[Field]) -> usize {
-    fields
+fn leaf_count(schema: &Schema) -> usize {
+    schema
+        .fields
         .iter()
         .map(|field| match &field.kind {
             FieldKind::Leaf => 1,
@@ -390,7 +422,7 @@ pub fn decode(input: &str) -> Result<Option<Value>> {
 struct HeaderLine {
     key: Option<String>,
     count: usize,
-    fields: Option<Vec<Field>>,
+    fields: Option<Schema>,
     inline: String,
 }
 
@@ -437,7 +469,7 @@ fn parse_header(input: &str) -> Result<Option<HeaderLine>> {
     let fields = if rest.starts_with('{') {
         let end = matching_brace(rest)?;
         let fields = if end == 1 {
-            Vec::new()
+            Schema::default()
         } else {
             parse_fields(&rest[1..end], 0)?
         };
@@ -457,7 +489,7 @@ fn parse_header(input: &str) -> Result<Option<HeaderLine>> {
     }))
 }
 
-fn parse_fields(input: &str, depth: usize) -> Result<Vec<Field>> {
+fn parse_fields(input: &str, depth: usize) -> Result<Schema> {
     if input.is_empty() {
         bail!("error[parse:sparse-toon]: field list must not be empty");
     }
@@ -490,7 +522,7 @@ fn parse_fields(input: &str, depth: usize) -> Result<Vec<Field>> {
     if fields.iter().any(|field| !seen.insert(&field.key)) {
         bail!("error[parse:sparse-toon]: duplicate field name");
     }
-    Ok(fields)
+    Ok(Schema::from_fields(fields))
 }
 
 fn matching_brace(input: &str) -> Result<usize> {
@@ -578,7 +610,7 @@ fn parse_table(
         .fields
         .ok_or_else(|| anyhow!("error[parse:sparse-toon]: sparse table requires fields"))?;
     *index += 1;
-    if fields.is_empty() {
+    if fields.fields.is_empty() {
         return Ok(Value::Array(
             (0..header.count)
                 .map(|_| Value::Object(Map::new()))
@@ -610,9 +642,9 @@ fn parse_table(
     Ok(Value::Array(rows))
 }
 
-fn decode_row(fields: &[Field], cells: &[String], index: &mut usize) -> Result<Map<String, Value>> {
+fn decode_row(fields: &Schema, cells: &[String], index: &mut usize) -> Result<Map<String, Value>> {
     let mut object = Map::new();
-    for field in fields {
+    for field in &fields.fields {
         match &field.kind {
             FieldKind::Leaf => {
                 let cell = cells
