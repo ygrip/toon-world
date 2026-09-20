@@ -5,7 +5,7 @@ use jaq_json::Val;
 use serde_json::Value;
 use tiktoken_rs::cl100k_base;
 use toon_world::cli::OutputFormat;
-use toon_world::output;
+use toon_world::{output, sparse};
 
 fn render(value: &Value, compact: bool) -> String {
     let value: Val = serde_json::from_value(value.clone()).unwrap();
@@ -14,8 +14,8 @@ fn render(value: &Value, compact: bool) -> String {
 
 fn main() {
     let encoder = cl100k_base().expect("cl100k_base must initialize");
-    println!("| fixture | normal bytes | normal tokens | compact bytes | compact tokens | byte reduction | token reduction |");
-    println!("| --- | ---: | ---: | ---: | ---: | ---: | ---: |");
+    println!("| fixture | standard bytes | standard tokens | sparse bytes | sparse tokens | byte reduction | token reduction | selected |");
+    println!("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |");
     for name in [
         "bench_sparse.json",
         "bench_dense.json",
@@ -26,19 +26,33 @@ fn main() {
             .join("tests/fixtures")
             .join(name);
         let value: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
-        let normal = render(&value, false);
-        let compact = render(&value, true);
-        let normal_tokens = encoder.encode_with_special_tokens(&normal).len();
-        let compact_tokens = encoder.encode_with_special_tokens(&compact).len();
-        let bytes = reduction(normal.len(), compact.len());
-        let tokens = reduction(normal_tokens, compact_tokens);
+
+        let standard = render(&value, false);
+        let sparse = sparse::encode(&value)
+            .expect("sparse encoding must succeed")
+            .expect("benchmark fixture must have a sparse candidate");
+        let selected = render(&value, true);
+
+        let standard_tokens = encoder.encode_with_special_tokens(&standard).len();
+        let sparse_tokens = encoder.encode_with_special_tokens(&sparse).len();
+        let bytes = reduction(standard.len(), sparse.len());
+        let tokens = reduction(standard_tokens, sparse_tokens);
+        let selected_format = if selected == sparse {
+            "sparse"
+        } else if selected == standard {
+            "standard"
+        } else {
+            "unexpected"
+        };
+
         println!(
-            "| {name} | {} | {normal_tokens} | {} | {compact_tokens} | {bytes:.2}% | {tokens:.2}% |",
-            normal.len(), compact.len()
+            "| {name} | {} | {standard_tokens} | {} | {sparse_tokens} | {bytes:.2}% | {tokens:.2}% | {selected_format} |",
+            standard.len(),
+            sparse.len()
         );
     }
 }
 
-fn reduction(normal: usize, compact: usize) -> f64 {
-    (1.0 - compact as f64 / normal as f64) * 100.0
+fn reduction(standard: usize, sparse: usize) -> f64 {
+    (1.0 - sparse as f64 / standard as f64) * 100.0
 }
