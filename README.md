@@ -2,7 +2,7 @@
 
 A fast, lightweight, single-binary query and transformation tool for structured and document data, with compact [TOON](https://github.com/toon-format/spec) output by default.
 
-> **Milestone 0.4:** Markdown becomes a queryable document format on top of the structured/query pipeline.
+> **Milestone 0.6:** HTML adapters and machine-readable byte statistics complete the current stack.
 
 ## Why
 
@@ -22,14 +22,30 @@ HTML ───┘
 
 `toon-world` embeds [`jaq`](https://github.com/01mf02/jaq); Markdown helpers are jaq definitions over the normalized document model, not a second query language.
 
-## Implemented through 0.4
+## Implemented through 0.6
 
-- JSON, NDJSON/JSONL, CSV, YAML, TOML, XML, TOON, and Markdown input
+- JSON, NDJSON/JSONL, CSV, YAML, TOML, XML, TOON, Markdown, and HTML input
 - extension inference plus explicit `--from`
 - jq-compatible selection/filter/projection
 - TOON default output, compact JSON, scalar text output
 - Markdown normalized into ordered sections and typed blocks
 - document helpers: `section("...")`, `code("...")`, and `links`
+- structural and semantic HTML document models
+- `--stats` JSON byte statistics on stderr
+
+## Installation
+
+Build and install from a checkout:
+
+```bash
+# macOS / Linux
+./scripts/install.sh
+
+# Windows PowerShell
+.\scripts\install.ps1
+```
+
+Both installers use an existing Rust toolchain or install it with official rustup, build a release binary, and copy it to the user-local bin directory. They print PATH guidance instead of modifying shell profiles.
 
 ## Markdown model
 
@@ -119,6 +135,8 @@ The current Rust integration uses `toon-format` 0.5.x for encoding and decoding.
 ## Testing and local verification
 
 CI is intentionally disabled during the initial milestone chain. Markdown tests cover preambles, missing/duplicate headings, frontmatter, block types, code with and without language, task lists, link titles, section/code helpers, extension/override routing, and invalid UTF-8, in addition to the inherited structured/TOON suite.
+
+Checked-in realistic sample files cover every supported input format. `--stats` reports JSON only on stderr, leaving normal stdout byte-for-byte unchanged.
 
 See [`docs/TESTING.md`](docs/TESTING.md) for the detailed matrix.
 

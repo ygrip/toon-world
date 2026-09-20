@@ -1,0 +1,6 @@
+[package]
+name = "toon-world-sample"
+version = "0.1.0"
+
+[limits]
+requests_per_minute = 60

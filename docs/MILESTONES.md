@@ -4,12 +4,12 @@ Each implementation milestone is developed as a separate, stacked pull request s
 
 | Milestone | Branch | Scope | Status on this branch |
 | --- | --- | --- | --- |
-| 0.1 | `feat/query-core` | JSON + jq-compatible query core + TOON/JSON/text output | inherited |
-| 0.2 | `feat/structured-adapters` | NDJSON, CSV, YAML, TOML, XML input adapters | inherited |
-| 0.3 | `feat/toon-input` | TOON as a queryable input format | inherited |
-| 0.4 | `feat/markdown-adapter` | Markdown normalized document model + helpers | implemented, local verification required |
-| 0.5 | `feat/html-adapter` | HTML structural/semantic normalized models + helpers | later stacked PR |
-| 0.6 | `feat/context-stats` | byte-size statistics for input and rendered output | later stacked PR |
+| 0.1 | `feat/query-core` | JSON + jq-compatible query core + TOON/JSON/text output | validated |
+| 0.2 | `feat/structured-adapters` | NDJSON, CSV, YAML, TOML, XML input adapters | validated |
+| 0.3 | `feat/toon-input` | TOON as a queryable input format | validated |
+| 0.4 | `feat/markdown-adapter` | Markdown normalized document model + helpers | validated |
+| 0.5 | `feat/html-adapter` | HTML structural/semantic normalized models + helpers | validated |
+| 0.6 | `feat/context-stats` | byte-size statistics for input and rendered output | validated |
 | experimental | `feat/sparse-tables` | reversible sparse heterogeneous-table experiment | research milestone |
 
 ## Verification policy
@@ -54,4 +54,4 @@ Tests cover preambles, missing/duplicate headings, code with and without languag
 
 ## Stacked review rule
 
-PR 0.4 is based on `feat/toon-input`. Review against that branch so Markdown remains one comprehensible milestone rather than a four-season recap of every earlier PR.
+Each branch is an ancestor of the next: `main` → query core → structured adapters → TOON input → Markdown → HTML → context stats. Review each PR against its immediate parent.

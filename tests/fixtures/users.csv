@@ -1,0 +1,3 @@
+id,name,email,active
+001,Ada Lovelace,ada@example.test,true
+002,Grace Hopper,grace@example.test,false
