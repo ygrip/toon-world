@@ -22,7 +22,9 @@ fn unknown_extension_warning_stays_on_stderr() {
         .unwrap();
     assert!(output.status.success());
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "Ada\n");
-    assert!(String::from_utf8(output.stderr).unwrap().contains("warning[input]"));
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains("warning[input]"));
 }
 
 #[test]
@@ -31,10 +33,19 @@ fn warnings_as_errors_blocks_result_output() {
     file.write_all(br#"{"name":"Ada"}"#).unwrap();
     let output = Command::cargo_bin("toon-world")
         .unwrap()
-        .args([file.path().to_str().unwrap(), "--warnings-as-errors", "-q", ".name", "--to", "text"])
+        .args([
+            file.path().to_str().unwrap(),
+            "--warnings-as-errors",
+            "-q",
+            ".name",
+            "--to",
+            "text",
+        ])
         .output()
         .unwrap();
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
-    assert!(String::from_utf8(output.stderr).unwrap().contains("error[warning-as-error]"));
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains("error[warning-as-error]"));
 }

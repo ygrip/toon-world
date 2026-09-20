@@ -25,11 +25,8 @@ fn detects_toon_extension_case_insensitively() {
 
 #[test]
 fn parses_toon_table_into_queryable_values() {
-    let value = input::parse_bytes(
-        b"users[2]{id,name}:\n  1,Ada\n  2,Bob",
-        InputFormat::Toon,
-    )
-    .unwrap();
+    let value =
+        input::parse_bytes(b"users[2]{id,name}:\n  1,Ada\n  2,Bob", InputFormat::Toon).unwrap();
     let result = query::execute(".users[1].name", value).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].to_string(), r#""Bob""#);
@@ -37,7 +34,8 @@ fn parses_toon_table_into_queryable_values() {
 
 #[test]
 fn toon_query_can_emit_multiple_results_in_order() {
-    let original = json!({"users":[{"id":1,"name":"Ada"},{"id":2,"name":"Bob"},{"id":3,"name":"Cid"}]});
+    let original =
+        json!({"users":[{"id":1,"name":"Ada"},{"id":2,"name":"Bob"},{"id":3,"name":"Cid"}]});
     let encoded = toon_format::encode_default(&original).unwrap();
     let value = input::parse_bytes(encoded.as_bytes(), InputFormat::Toon).unwrap();
     let results = query::execute(".users[] | .name", value).unwrap();
@@ -49,7 +47,8 @@ fn toon_query_can_emit_multiple_results_in_order() {
 
 #[test]
 fn toon_round_trip_preserves_absent_null_and_empty_string() {
-    let original = json!({"items":[{"id":1,"note":null,"empty":""},{"id":2,"empty":""}],"active":true});
+    let original =
+        json!({"items":[{"id":1,"note":null,"empty":""},{"id":2,"empty":""}],"active":true});
     assert_eq!(round_trip_through_toon(original.clone()), original);
 }
 
@@ -133,7 +132,15 @@ fn explicit_toon_input_overrides_misleading_extension() {
     file.write_all(b"name: Ada\nactive: true").unwrap();
     let output = Command::cargo_bin("toon-world")
         .unwrap()
-        .args([file.path().to_str().unwrap(), "--from", "toon", "-q", ".name", "--to", "text"])
+        .args([
+            file.path().to_str().unwrap(),
+            "--from",
+            "toon",
+            "-q",
+            ".name",
+            "--to",
+            "text",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success());
