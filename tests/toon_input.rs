@@ -27,7 +27,6 @@ fn detects_toon_extension_case_insensitively() {
 fn parses_toon_table_into_queryable_values() {
     let value =
         input::parse_bytes(b"users[2]{id,name}:\n  1,Ada\n  2,Bob", InputFormat::Toon).unwrap();
-
     let result = query::execute(".users[1].name", value).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].to_string(), r#""Bob""#);
@@ -61,7 +60,6 @@ fn toon_round_trip_preserves_absent_null_and_empty_string() {
         ],
         "active": true
     });
-
     assert_eq!(round_trip_through_toon(original.clone()), original);
 }
 
