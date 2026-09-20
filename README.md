@@ -63,12 +63,13 @@ toon-world records.stoon --from sparse-toon --to json
 ```
 
 Run [`examples/usage.sh`](examples/usage.sh) for the same flow against checked-in sample files.
+For format-by-format examples, input/output rules, common queries, and troubleshooting, see [`docs/USAGE.md`](docs/USAGE.md).
 
 ### Experimental compact sparse-TOON
 
 `--compact` applies to root arrays of objects and falls back to ordinary TOON for other values. Nested objects become JSON-Pointer columns, arrays remain values, and the versioned output distinguishes absent (`~`), `null`, empty strings, and literal `"~"`. Decode it explicitly with `--from sparse-toon`; ordinary `--to toon` remains standard TOON.
 
-See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) for reproducible byte and cl100k token measurements.
+See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) for reproducible byte and cl100k token measurements, fixture descriptions, and interpretation guidance.
 
 ## HTML and statistics
 
@@ -203,6 +204,8 @@ printf '%s' $'Intro.\n\n# Demo\n' \
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): milestone direction
 - [`docs/MILESTONES.md`](docs/MILESTONES.md): stacked PR contract/status
 - [`docs/TESTING.md`](docs/TESTING.md): verification and Markdown coverage matrix
+- [`docs/USAGE.md`](docs/USAGE.md): task-oriented CLI guide and sparse-TOON walkthrough
+- [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md): reproducible token/byte methodology and results
 - [`docs/superpowers/specs/2026-09-16-toon-world-design.md`](docs/superpowers/specs/2026-09-16-toon-world-design.md): architecture/design
 
 ## Reference
