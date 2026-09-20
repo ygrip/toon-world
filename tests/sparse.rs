@@ -211,6 +211,48 @@ fn compact_declines_table_vs_object_conflict() {
 }
 
 #[test]
+fn compact_encodes_root_object_with_item_array() {
+    let original = json!({
+        "items": [
+            {"id": "d1", "status": "cancelled", "usage": {"tokens": 0}},
+            {"id": "d2", "status": "completed", "usage": {"tokens": 100}}
+        ],
+        "scope_counts": {"active": 7, "completed": 20}
+    });
+    let rendered = sparse::encode(&original).unwrap().unwrap();
+
+    assert!(rendered.starts_with("{items[]{id,status,usage{tokens}},scope_counts{active,completed}}:\n"));
+    assert!(rendered.contains("    items[2]:\n"));
+    assert!(!rendered.contains("items[2]{id"));
+    assert_eq!(decoded(&rendered), original);
+}
+
+#[test]
+fn compact_encodes_root_object_without_arrays() {
+    let original = json!({"name": "Ada", "profile": {"team": "platform"}});
+    let rendered = sparse::encode(&original).unwrap().unwrap();
+
+    assert_eq!(rendered, "{name,profile{team}}:\n  Ada,platform\n");
+    assert_eq!(decoded(&rendered), original);
+}
+
+#[test]
+fn compact_declines_trivial_root_objects() {
+    assert!(sparse::encode(&json!({})).unwrap().is_none());
+    assert!(sparse::encode(&json!({"extra": {}})).unwrap().is_none());
+}
+
+#[test]
+fn compact_root_object_with_scalar_array_still_round_trips_as_attachment() {
+    let original = json!({"id": 1, "roles": ["admin", "owner"]});
+    let rendered = sparse::encode(&original).unwrap().unwrap();
+
+    assert!(rendered.starts_with("{id}:\n"));
+    assert!(rendered.contains("roles[2]: admin,owner"));
+    assert_eq!(decoded(&rendered), original);
+}
+
+#[test]
 fn compact_preserves_empty_and_absent_nested_objects() {
     let original = json!([
         {"id": 1, "profile": {}},

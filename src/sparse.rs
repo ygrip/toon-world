@@ -57,11 +57,17 @@ enum Node {
         rows: Vec<Vec<Cell>>,
     },
 }
-/// Encodes root arrays of objects as headerless sparse TOON. Other shapes use standard TOON.
+/// Encodes root arrays of objects, and root objects, as headerless sparse TOON.
+/// Other shapes use standard TOON.
 pub fn encode(value: &Value) -> Result<Option<String>> {
-    let Value::Array(values) = value else {
-        return Ok(None);
-    };
+    match value {
+        Value::Array(values) => encode_array(values),
+        Value::Object(object) => encode_root_object(value, object),
+        _ => Ok(None),
+    }
+}
+
+fn encode_array(values: &[Value]) -> Result<Option<String>> {
     if values.is_empty() || !values.iter().all(Value::is_object) {
         return Ok(None);
     }
@@ -77,6 +83,27 @@ pub fn encode(value: &Value) -> Result<Option<String>> {
         };
         render_table(None, values, &schema, 0, &mut output)?;
     }
+    Ok(Some(output))
+}
+
+/// Encodes a root object as a single-row headerless sparse table, reusing the
+/// same field-schema machinery a row of an array-of-objects table would use.
+fn encode_root_object(value: &Value, object: &Map<String, Value>) -> Result<Option<String>> {
+    if has_unsupported_keys(value) {
+        return Ok(None);
+    }
+    let mut schema = Schema::default();
+    if !merge_schema(&mut schema, object, 0)? {
+        return Ok(None);
+    }
+    if schema.fields.is_empty() {
+        return Ok(None);
+    }
+    let mut output = String::new();
+    output.push('{');
+    render_fields(&schema, &mut output)?;
+    output.push_str("}:\n");
+    render_table_rows(&schema, std::slice::from_ref(value), 2, &mut output)?;
     Ok(Some(output))
 }
 
@@ -486,10 +513,17 @@ pub fn decode(input: &str) -> Result<Option<Value>> {
         .chars()
         .take_while(|character| *character == ' ')
         .count();
-    let Some(header) = parse_header(&first[indent..])? else {
+    if indent != 0 {
+        return Ok(None);
+    }
+    let trimmed = &first[indent..];
+    if trimmed.starts_with('{') {
+        return decode_root_object(input);
+    }
+    let Some(header) = parse_header(trimmed)? else {
         return Ok(None);
     };
-    if indent != 0 || header.key.is_some() || header.fields.is_none() || !header.inline.is_empty() {
+    if header.key.is_some() || header.fields.is_none() || !header.inline.is_empty() {
         return Ok(None);
     }
     let lines = parse_lines(input)?;
@@ -499,6 +533,33 @@ pub fn decode(input: &str) -> Result<Option<Value>> {
         bail!("error[parse:sparse-toon]: trailing content after root table");
     }
     Ok(Some(value))
+}
+
+/// Decodes a root object encoded by [`encode_root_object`]: a bracket-less
+/// `{fields}:` header followed by exactly one row of that schema.
+fn decode_root_object(input: &str) -> Result<Option<Value>> {
+    let lines = parse_lines(input)?;
+    let Some(first) = lines.first() else {
+        return Ok(None);
+    };
+    if first.indent != 0 || !first.text.starts_with('{') {
+        return Ok(None);
+    }
+    let end = matching_brace(&first.text)?;
+    if end == 1 {
+        // Encoder never emits an empty root object; leave it to standard TOON.
+        return Ok(None);
+    }
+    let fields = parse_fields(&first.text[1..end], 0)?;
+    if first.text[end + 1..] != *":" {
+        bail!("error[parse:sparse-toon]: expected ':' after root object header");
+    }
+    let mut index = 1;
+    let rows = parse_table_body(&lines, &mut index, 2, 1, &fields)?;
+    if index != lines.len() {
+        bail!("error[parse:sparse-toon]: trailing content after root object");
+    }
+    Ok(rows.into_iter().next())
 }
 
 #[derive(Debug)]
