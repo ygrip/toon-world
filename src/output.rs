@@ -33,9 +33,7 @@ fn structured_result(values: &[Val]) -> Result<Value> {
 fn to_json_value(value: &Val) -> Result<Value> {
     let rendered = value.to_string();
     serde_json::from_str(&rendered).map_err(|error| {
-        anyhow::anyhow!(
-            "error[normalize]: query result is not JSON-compatible: {error}"
-        )
+        anyhow::anyhow!("error[normalize]: query result is not JSON-compatible: {error}")
     })
 }
 
