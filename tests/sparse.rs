@@ -22,7 +22,8 @@ fn compact_sparse_toon_round_trips_nested_sparse_rows() {
     let rendered = sparse::encode(&original).unwrap().unwrap();
 
     assert!(rendered.starts_with("@toon-world/sparse-v1\n"));
-    assert!(rendered.contains("\"/profile/name\""));
+    assert!(rendered.contains("id,profile.name,profile.team,roles"));
+    assert!(!rendered.contains("\"/profile/name\""));
     assert_eq!(decoded(&rendered), original);
 }
 
@@ -48,7 +49,7 @@ fn compact_escapes_pointer_keys_and_references_nested_arrays() {
     let rendered = sparse::encode(&original).unwrap().unwrap();
 
     assert!(rendered.contains("/a~1b/til~0de"));
-    assert!(rendered.contains("\"/items\""));
+    assert!(rendered.contains("items"));
     assert!(rendered.contains("root=^0"));
     assert!(!rendered.contains("[1,{\"name\":\"Ada\"}]"));
     assert_eq!(decoded(&rendered), original);
@@ -85,7 +86,7 @@ fn recursive_v1_round_trips_cucumber_shaped_nested_data() {
     let rendered = sparse::encode(&original).unwrap().unwrap();
 
     assert!(rendered.starts_with("@toon-world/sparse-v1\nroot=^0\n"));
-    assert!(rendered.contains("\"/elements\""));
+    assert!(rendered.contains("uri,tags,elements"));
     assert_eq!(decoded(&rendered), original);
 }
 
@@ -96,6 +97,19 @@ fn legacy_v1_table_still_decodes() {
         decoded(rendered),
         json!([{"id": 1, "name": "Ada"}, {"id": 2}])
     );
+}
+
+#[test]
+fn compact_uses_bare_columns_and_quotes_only_ambiguous_paths() {
+    let original = json!([
+        {"uri": "one", "start_timestamp": "now", "profile": {"name": "Ada"}, "a.b": 1},
+        {"uri": "two", "start_timestamp": "later", "profile": {"name": "Grace"}, "a.b": 2}
+    ]);
+    let rendered = sparse::encode(&original).unwrap().unwrap();
+
+    assert!(rendered.contains("uri,start_timestamp,profile.name,\"/a.b\""));
+    assert!(!rendered.contains("\"/uri\""));
+    assert_eq!(decoded(&rendered), original);
 }
 
 #[test]

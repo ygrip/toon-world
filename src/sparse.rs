@@ -152,8 +152,8 @@ fn render_node(node: Node, output: &mut String) -> Result<()> {
                 rows.len(),
                 columns
                     .iter()
-                    .map(serde_json::to_string)
-                    .collect::<serde_json::Result<Vec<_>>>()?
+                    .map(|column| render_column(column))
+                    .collect::<Result<Vec<_>>>()?
                     .join(",")
             ));
             for row in rows {
@@ -458,12 +458,63 @@ fn parse_shape(shape: &str) -> Result<(usize, Vec<String>)> {
     let count = count
         .parse()
         .context("error[parse:sparse-toon]: invalid row count")?;
-    let columns = serde_json::from_str::<Vec<String>>(&format!("[{columns}]"))
-        .context("error[parse:sparse-toon]: invalid column list")?;
-    if columns.is_empty() || columns.iter().any(|column| !column.starts_with('/')) {
+    let columns = split_cells(columns)?
+        .into_iter()
+        .map(|column| parse_column(&column))
+        .collect::<Result<Vec<_>>>()?;
+    if columns.is_empty() {
         bail!("error[parse:sparse-toon]: columns must be JSON Pointer paths");
     }
     Ok((count, columns))
+}
+
+fn render_column(pointer: &str) -> Result<String> {
+    let segments = pointer
+        .strip_prefix('/')
+        .ok_or_else(|| anyhow!("error[encode:sparse-toon]: invalid column path"))?
+        .split('/')
+        .map(unescape_pointer)
+        .collect::<Result<Vec<_>>>()?;
+    if segments
+        .iter()
+        .all(|segment| is_bare_column_segment(segment))
+    {
+        return Ok(segments.join("."));
+    }
+    serde_json::to_string(pointer).context("error[encode:sparse-toon]: invalid column path")
+}
+
+fn parse_column(column: &str) -> Result<String> {
+    if column.starts_with('"') {
+        let pointer: String = serde_json::from_str(column)
+            .context("error[parse:sparse-toon]: invalid quoted column")?;
+        if pointer.starts_with('/') {
+            return Ok(pointer);
+        }
+        bail!("error[parse:sparse-toon]: quoted column must be a JSON Pointer path");
+    }
+    let segments = column.split('.').collect::<Vec<_>>();
+    if segments.is_empty()
+        || !segments
+            .iter()
+            .all(|segment| is_bare_column_segment(segment))
+    {
+        bail!("error[parse:sparse-toon]: invalid bare column");
+    }
+    Ok(format!(
+        "/{}",
+        segments
+            .into_iter()
+            .map(escape_pointer)
+            .collect::<Vec<_>>()
+            .join("/")
+    ))
+}
+
+fn is_bare_column_segment(segment: &str) -> bool {
+    let mut characters = segment.chars();
+    matches!(characters.next(), Some(character) if character.is_ascii_alphabetic() || character == '_')
+        && characters.all(|character| character.is_ascii_alphanumeric() || character == '_')
 }
 fn split_cells(line: &str) -> Result<Vec<String>> {
     let mut cells = Vec::new();

@@ -78,14 +78,14 @@ toon-world records.json --compact > records.stoon
 head -3 records.stoon
 # @toon-world/sparse-v1
 # root=^0
-# ^0=[2]{"/id","/profile/name","/profile/team"}:
+# ^0=[2]{id,profile.name,profile.team}:
 # 1,"Ada","platform"
 
 # Restore the exact JSON-compatible value.
 toon-world records.stoon --from sparse-toon --to json
 ```
 
-Nested objects become JSON-Pointer columns. Nested arrays become referenced sparse tables or lists, so hooks, steps, tags, rows, arguments, and embeddings do not expand into a JSON cell. `~` means a property was absent; `null`, `""`, and `"~"` retain their normal JSON meanings. Existing root-table v1 files remain valid. `--compact` cannot be combined with `--to json` or `--to text`.
+Nested objects become readable dot-path columns: `uri`, `profile.name`, and `match.location`. Keys that are ambiguous in dot form (for example `a.b` or `a/b`) retain a quoted JSON-Pointer path, so decode remains lossless. Nested arrays become referenced sparse tables or lists, so hooks, steps, tags, rows, arguments, and embeddings do not expand into a JSON cell. `~` means a property was absent; `null`, `""`, and `"~"` retain their normal JSON meanings. Existing root-table v1 files remain valid. `--compact` cannot be combined with `--to json` or `--to text`.
 
 For a Cucumber report, compact mode recursively normalizes repeated child collections:
 
