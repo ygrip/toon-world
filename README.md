@@ -43,6 +43,14 @@ HTML ───┘
 | XML | structural `t` / `a` / `c` representation preserving ordered children |
 | TOON | decoded JSON-compatible value, then queried like any other structured input |
 
+## JSON Lines input
+
+`.jsonl` and `.ndjson` are inferred as NDJSON and normalized as an ordered array:
+
+```bash
+toon-world events.jsonl -q '.[] | select(.level == "warn")'
+```
+
 ## TOON input
 
 ```bash

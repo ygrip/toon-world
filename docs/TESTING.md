@@ -28,6 +28,7 @@ Milestone 0.3 includes the complete query/output coverage from 0.1 and structure
 - nested TOML;
 - XML attributes, ordered children, mixed content, multi-root input;
 - format detection, overrides, malformed input, UTF-8 errors.
+- checked-in `.jsonl` file inference and query routing through the CLI.
 
 ## TOON input coverage introduced in 0.3
 
