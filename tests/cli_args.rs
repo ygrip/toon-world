@@ -52,6 +52,21 @@ fn parses_raw_data_with_explicit_format() {
 }
 
 #[test]
+fn parses_compact_sparse_toon_options() {
+    let args = Args::try_parse_from([
+        "toon-world",
+        "payload.stoon",
+        "--from",
+        "sparse-toon",
+        "--compact",
+    ])
+    .unwrap();
+
+    assert_eq!(args.from, Some(InputFormat::SparseToon));
+    assert!(args.compact);
+}
+
+#[test]
 fn dash_and_toon_can_be_combined_for_stdin() {
     let args = Args::try_parse_from(["toon-world", "-", "--from", "toon", "--to", "text"]).unwrap();
 

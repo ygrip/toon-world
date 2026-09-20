@@ -47,6 +47,30 @@ Build and install from a checkout:
 
 Both installers use an existing Rust toolchain or install it with official rustup, build a release binary, and copy it to the user-local bin directory. They print PATH guidance instead of modifying shell profiles.
 
+## Quick usage
+
+```bash
+# Query any supported input; extensions infer the parser.
+toon-world users.json -q '.users[] | select(.active) | .name' --to text
+toon-world events.jsonl -q '.[] | select(.level == "warn") | .message' --to text
+
+# Ask for byte reduction statistics on stderr.
+toon-world users.json --stats
+
+# Experimental: flatten sparse object rows into compact sparse-TOON.
+toon-world records.json --compact > records.stoon
+toon-world records.stoon --from sparse-toon --to json
+```
+
+Run [`examples/usage.sh`](examples/usage.sh) for the same flow against checked-in sample files.
+For format-by-format examples, input/output rules, common queries, and troubleshooting, see [`docs/USAGE.md`](docs/USAGE.md).
+
+### Experimental compact sparse-TOON
+
+`--compact` uses an experimental headerless sparse-TOON dialect when its UTF-8 output is smaller than ordinary TOON. Nested object columns fold into TOON-style field groups such as `profile{name,team}`, while each row stays flat. Homogeneous child-object arrays appear as indented child tables; other child-array shapes fall back to standard TOON. `~` means absent; `null`, empty strings, and literal `"~"` stay distinct. Decode with `--from sparse-toon`; ordinary `--to toon` remains standard TOON. Legacy `@toon-world/sparse-v1` files still decode.
+
+See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) for reproducible byte and cl100k token measurements, fixture descriptions, and interpretation guidance.
+
 ## HTML and statistics
 
 HTML defaults to a structural DOM-shaped model that retains tags, attributes, ordered children, scripts, and styles. Use `--semantic` for compact agent-oriented content that retains title, metadata, sections, code, lists, tables, links, images, and forms while omitting script/style payloads.
@@ -180,6 +204,8 @@ printf '%s' $'Intro.\n\n# Demo\n' \
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): milestone direction
 - [`docs/MILESTONES.md`](docs/MILESTONES.md): stacked PR contract/status
 - [`docs/TESTING.md`](docs/TESTING.md): verification and Markdown coverage matrix
+- [`docs/USAGE.md`](docs/USAGE.md): task-oriented CLI guide and sparse-TOON walkthrough
+- [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md): reproducible token/byte methodology and results
 - [`docs/superpowers/specs/2026-09-16-toon-world-design.md`](docs/superpowers/specs/2026-09-16-toon-world-design.md): architecture/design
 
 ## Reference

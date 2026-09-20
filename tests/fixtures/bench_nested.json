@@ -1,0 +1,5 @@
+[
+  {"id":1,"service":{"name":"payments","owner":{"team":"checkout","on_call":"ada"}},"labels":["pci","critical"]},
+  {"id":2,"service":{"name":"search","owner":{"team":"discovery"}},"labels":["latency"]},
+  {"id":3,"service":{"name":"profile","owner":{"team":"identity","on_call":"grace"}},"labels":[]}
+]

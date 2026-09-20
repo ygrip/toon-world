@@ -47,6 +47,17 @@ fn json_output_is_compact_and_preserves_key_order() {
 }
 
 #[test]
+fn compact_selection_uses_sparse_only_when_smaller() {
+    let sparse = output::select_compact_toon("standard".to_owned(), Some("small".to_owned()));
+    let standard = output::select_compact_toon("small".to_owned(), Some("standard".to_owned()));
+
+    assert_eq!(sparse.label(), "sparse");
+    assert_eq!(sparse.rendered(), "small");
+    assert_eq!(standard.label(), "standard");
+    assert_eq!(standard.rendered(), "small");
+}
+
+#[test]
 fn json_output_preserves_large_integer_text() {
     let input = value(r#"{"id":123456789012345678901234567890}"#);
     let rendered = output::encode_results(&[input], OutputFormat::Json).unwrap();

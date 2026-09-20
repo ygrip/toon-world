@@ -80,3 +80,7 @@ Likewise, `section("Name")` is tested as a jaq helper over the normalized `secti
 ## Regression rule
 
 When a Markdown bug is reported, prefer a minimal source fragment plus an assertion on the normalized value or helper output. Avoid snapshotting the entire document unless the whole schema is under test; enormous snapshots mostly prove that enormous snapshots can be reviewed poorly.
+
+## Compact sparse-TOON experiment
+
+The sparse-TOON suite covers headerless encode/decode, nested field groups, indented child arrays, TOON key quoting, absent/null/empty distinction, legacy sparse-v1 decoding, standard-TOON fallback, and CLI routing. `compact_benchmarks.rs` checks that compact output never exceeds standard TOON byte length for checked-in regression fixtures. Generated matrix reporting keeps `cl100k_base` as benchmark-only reference data; runtime selection is byte-based.

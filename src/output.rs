@@ -3,8 +3,54 @@ use jaq_json::Val;
 use serde_json::Value;
 
 use crate::cli::OutputFormat;
+use crate::sparse;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompactToonSelection {
+    Standard(String),
+    Sparse(String),
+}
+
+impl CompactToonSelection {
+    pub fn rendered(&self) -> &str {
+        match self {
+            Self::Standard(rendered) | Self::Sparse(rendered) => rendered,
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Standard(_) => "standard",
+            Self::Sparse(_) => "sparse",
+        }
+    }
+
+    pub fn into_rendered(self) -> String {
+        match self {
+            Self::Standard(rendered) | Self::Sparse(rendered) => rendered,
+        }
+    }
+}
+
+pub fn select_compact_toon(standard: String, sparse: Option<String>) -> CompactToonSelection {
+    match sparse {
+        Some(sparse) if sparse.len() < standard.len() => CompactToonSelection::Sparse(sparse),
+        _ => CompactToonSelection::Standard(standard),
+    }
+}
 
 pub fn encode_results(values: &[Val], format: OutputFormat) -> Result<String> {
+    encode_results_with_options(values, format, false)
+}
+
+pub fn encode_results_with_options(
+    values: &[Val],
+    format: OutputFormat,
+    compact: bool,
+) -> Result<String> {
+    if compact && format != OutputFormat::Toon {
+        bail!("error[encode:sparse-toon]: --compact requires --to toon");
+    }
     match format {
         OutputFormat::Text => encode_text_results(values),
         OutputFormat::Json => {
@@ -13,8 +59,12 @@ pub fn encode_results(values: &[Val], format: OutputFormat) -> Result<String> {
         }
         OutputFormat::Toon => {
             let value = structured_result(values)?;
-            toon_format::encode_default(&value)
-                .map_err(|error| anyhow::anyhow!("error[encode:toon]: {error}"))
+            let standard = toon_format::encode_default(&value)
+                .map_err(|error| anyhow::anyhow!("error[encode:toon]: {error}"))?;
+            if compact {
+                return Ok(select_compact_toon(standard, sparse::encode(&value)?).into_rendered());
+            }
+            Ok(standard)
         }
     }
 }
