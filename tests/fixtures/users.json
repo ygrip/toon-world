@@ -1,0 +1,9 @@
+{
+  "service": "accounts-api",
+  "generated_at": "2026-09-20T09:30:00Z",
+  "users": [
+    {"id": 101, "name": "Ada Lovelace", "active": true, "roles": ["admin", "editor"]},
+    {"id": 102, "name": "Grace Hopper", "active": false, "roles": ["viewer"]},
+    {"id": 103, "name": "Linus Torvalds", "active": true, "roles": []}
+  ]
+}
