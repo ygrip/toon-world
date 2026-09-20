@@ -28,7 +28,12 @@ fn tokens(value: &str) -> usize {
 
 #[test]
 fn compact_benchmark_report() {
-    for name in ["bench_sparse.json", "bench_dense.json", "bench_nested.json"] {
+    for name in [
+        "bench_sparse.json",
+        "bench_dense.json",
+        "bench_nested.json",
+        "bench_cucumber.json",
+    ] {
         let value = fixture(name);
         let normal = render(&value, false);
         let compact = render(&value, true);
@@ -39,7 +44,7 @@ fn compact_benchmark_report() {
             compact.len(),
             tokens(&compact)
         );
-        assert!(compact.starts_with("@toon-world/sparse-v1"));
+        assert!(tokens(&compact) <= tokens(&normal));
     }
 }
 

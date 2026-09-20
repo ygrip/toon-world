@@ -67,7 +67,7 @@ For format-by-format examples, input/output rules, common queries, and troublesh
 
 ### Experimental compact sparse-TOON
 
-`--compact` applies to root arrays of objects and falls back to ordinary TOON for other values. Nested objects become JSON-Pointer columns, arrays remain values, and the versioned output distinguishes absent (`~`), `null`, empty strings, and literal `"~"`. Decode it explicitly with `--from sparse-toon`; ordinary `--to toon` remains standard TOON.
+`--compact` uses experimental `@toon-world/sparse-v1` for nested, heterogeneous JSON structures when it has fewer `cl100k_base` tokens than ordinary TOON. Nested arrays become referenced sparse tables or lists, not JSON text inside a parent cell. Existing v1 root-table files still decode. `~` means absent; `null`, empty strings, and literal `"~"` stay distinct. Decode with `--from sparse-toon`; ordinary `--to toon` remains standard TOON.
 
 See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) for reproducible byte and cl100k token measurements, fixture descriptions, and interpretation guidance.
 

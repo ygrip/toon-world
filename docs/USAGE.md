@@ -71,20 +71,28 @@ Use structural HTML (the default) when tags, attributes, comments, or exact chil
 
 ## Experimental compact sparse-TOON
 
-Use `--compact` for a result that is a root array of objects with optional or nested fields. It writes a versioned sparse-TOON table rather than standard TOON:
+Use `--compact` for nested or heterogeneous structured results. It writes experimental sparse-TOON v1 only when it beats ordinary TOON under `cl100k_base`; otherwise it emits ordinary TOON:
 
 ```bash
 toon-world records.json --compact > records.stoon
 head -3 records.stoon
 # @toon-world/sparse-v1
-# [2]{"/id","/profile/name","/profile/team"}:
+# root=^0
+# ^0=[2]{"/id","/profile/name","/profile/team"}:
 # 1,"Ada","platform"
 
 # Restore the exact JSON-compatible value.
 toon-world records.stoon --from sparse-toon --to json
 ```
 
-Nested objects become JSON-Pointer columns. Arrays remain one value so their order is preserved. `~` means a property was absent; `null`, `""`, and `"~"` retain their normal JSON meanings. `--compact` falls back to ordinary TOON when the result is not a non-empty array of objects, and it cannot be combined with `--to json` or `--to text`.
+Nested objects become JSON-Pointer columns. Nested arrays become referenced sparse tables or lists, so hooks, steps, tags, rows, arguments, and embeddings do not expand into a JSON cell. `~` means a property was absent; `null`, `""`, and `"~"` retain their normal JSON meanings. Existing root-table v1 files remain valid. `--compact` cannot be combined with `--to json` or `--to text`.
+
+For a Cucumber report, compact mode recursively normalizes repeated child collections:
+
+```bash
+toon-world cucumber.json --compact > cucumber.stoon
+toon-world cucumber.stoon --from sparse-toon --to json > cucumber.roundtrip.json
+```
 
 Sparse-TOON is a toon-world experimental codec. Standard `--to toon` remains the interoperable TOON path.
 

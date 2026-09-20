@@ -25,13 +25,16 @@ pub fn encode_results_with_options(
         }
         OutputFormat::Toon => {
             let value = structured_result(values)?;
+            let standard = toon_format::encode_default(&value)
+                .map_err(|error| anyhow::anyhow!("error[encode:toon]: {error}"))?;
             if compact {
                 if let Some(rendered) = sparse::encode(&value)? {
-                    return Ok(rendered);
+                    if sparse::token_count(&rendered)? < sparse::token_count(&standard)? {
+                        return Ok(rendered);
+                    }
                 }
             }
-            toon_format::encode_default(&value)
-                .map_err(|error| anyhow::anyhow!("error[encode:toon]: {error}"))
+            Ok(standard)
         }
     }
 }

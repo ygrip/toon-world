@@ -16,7 +16,12 @@ fn main() {
     let encoder = cl100k_base().expect("cl100k_base must initialize");
     println!("| fixture | normal bytes | normal tokens | compact bytes | compact tokens | byte reduction | token reduction |");
     println!("| --- | ---: | ---: | ---: | ---: | ---: | ---: |");
-    for name in ["bench_sparse.json", "bench_dense.json", "bench_nested.json"] {
+    for name in [
+        "bench_sparse.json",
+        "bench_dense.json",
+        "bench_nested.json",
+        "bench_cucumber.json",
+    ] {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures")
             .join(name);
