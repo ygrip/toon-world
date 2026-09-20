@@ -5,3 +5,4 @@ pub mod input;
 pub mod markdown;
 pub mod output;
 pub mod query;
+pub mod stats;

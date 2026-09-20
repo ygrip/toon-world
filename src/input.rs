@@ -14,6 +14,7 @@ use crate::{html, markdown};
 pub struct ReadResult {
     pub value: Val,
     pub warnings: Vec<Warning>,
+    pub byte_len: usize,
 }
 
 pub fn read(
@@ -23,13 +24,24 @@ pub fn read(
     semantic: bool,
 ) -> Result<ReadResult> {
     let (format, warnings) = resolve_format(path, explicit_format);
-    let value = if let Some(data) = data {
-        parse_bytes_with_options(data.as_bytes(), format, semantic)?
+    let (value, byte_len) = if let Some(data) = data {
+        (
+            parse_bytes_with_options(data.as_bytes(), format, semantic)?,
+            data.len(),
+        )
     } else {
         let bytes = read_bytes(path)?;
-        parse_bytes_with_options(&bytes, format, semantic)?
+        let byte_len = bytes.len();
+        (
+            parse_bytes_with_options(&bytes, format, semantic)?,
+            byte_len,
+        )
     };
-    Ok(ReadResult { value, warnings })
+    Ok(ReadResult {
+        value,
+        warnings,
+        byte_len,
+    })
 }
 
 fn resolve_format(

@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use anyhow::Result;
 use clap::Parser;
 use toon_world::cli::Args;
-use toon_world::{diagnostics, input, output, query};
+use toon_world::{diagnostics, input, output, query, stats};
 
 fn main() {
     if let Err(error) = run() {
@@ -25,6 +25,7 @@ fn run() -> Result<()> {
     if !rendered_warnings.is_empty() {
         eprintln!("{rendered_warnings}");
     }
+    let input_bytes = input.byte_len;
     let values = query::execute(&args.query, input.value)?;
     let rendered = output::encode_results(&values, args.to)?;
 
@@ -33,6 +34,9 @@ fn run() -> Result<()> {
     stdout.write_all(rendered.as_bytes())?;
     if !rendered.is_empty() && !rendered.ends_with('\n') {
         stdout.write_all(b"\n")?;
+    }
+    if args.stats {
+        eprintln!("{}", stats::render(input_bytes, rendered.len()));
     }
     Ok(())
 }
