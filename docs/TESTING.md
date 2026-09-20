@@ -2,7 +2,7 @@
 
 CI is intentionally disabled during the initial milestone chain. Local verification is the source of truth until CI is re-enabled.
 
-The suite optimizes for **behavioral confidence per test**, not a cosmetic coverage percentage. Each adapter is tested where silent coercion, reordering, or data loss would hurt the most.
+The suite targets behavioral contracts and silent-data-loss risks rather than chasing a decorative line-coverage percentage.
 
 ## Required local verification
 
@@ -15,82 +15,59 @@ cargo build --release
 
 A milestone is not locally verified until all four commands succeed.
 
-## Test layers
+## Inherited coverage
 
-### Query/output core inherited from 0.1
+Milestone 0.3 includes the complete query/output coverage from 0.1 and structured-adapter coverage from 0.2:
 
-Coverage includes:
+- query identity, filtering, projection, errors, ordered/empty streams;
+- CLI defaults, stdin/file routing, missing-file errors;
+- TOON output semantic round-trip and JSON/text output boundaries;
+- NDJSON ordering;
+- CSV text preservation, quoting/CRLF, invalid headers;
+- YAML native types, aliases, and multi-documents;
+- nested TOML;
+- XML attributes, ordered children, mixed content, multi-root input;
+- format detection, overrides, malformed input, UTF-8 errors.
 
-- identity, selection, filtering, projection;
-- ordered and empty result streams;
-- query parse/runtime errors;
-- file/stdin routing and missing-file errors;
-- CLI defaults and enum validation;
-- TOON semantic round-trip, nested/escaped values;
-- compact JSON, key order, and very large integers;
-- scalar text output, empty output, null vs empty string, and structured-value rejection.
+## TOON input coverage introduced in 0.3
 
-### Adapter tests introduced in 0.2
-
-Adapter tests call `input::parse_bytes` directly so a parser regression is distinguishable from CLI wiring.
-
-| Adapter contract | Covered |
+| Contract | Covered |
 | --- | --- |
-| extension detection, case-insensitive | yes |
-| explicit `--from` override | yes |
-| unknown extension JSON fallback | yes |
-| non-JSON stdin with `--from` | yes |
-| NDJSON preserves line order | yes |
-| NDJSON tolerates surrounding whitespace | yes |
-| malformed NDJSON labeled correctly | yes |
-| CSV header-to-object mapping | yes |
-| CSV cells remain strings | yes |
-| CSV preserves leading zeros | yes |
-| CSV preserves empty string | yes |
-| CSV quoted comma/quote handling | yes |
-| CSV CRLF input | yes |
-| duplicate/empty CSV headers rejected | yes |
-| malformed-width CSV labeled correctly | yes |
-| YAML bool/number/null types | yes |
-| YAML anchors/aliases | yes |
-| multi-document YAML order | yes |
-| TOML scalar/array mapping | yes |
-| TOML nested tables | yes |
-| XML tag/attribute/child mapping | yes |
-| XML mixed-content order | yes |
-| multiple XML roots preserve order | yes |
-| invalid UTF-8 labeled per text format | yes |
+| `.toon` extension detection | yes |
+| case-insensitive TOON extension | yes |
+| explicit `--from toon` | yes |
+| explicit TOON stdin | yes |
+| explicit TOON override over misleading extension | yes |
+| standard tabular TOON query | yes |
+| multiple query results preserve order | yes |
+| JSON -> TOON -> decoder -> JSON semantic round-trip | yes |
+| absent property vs `null` vs empty string | yes |
+| nested objects/arrays | yes |
+| heterogeneous nested values | yes |
+| empty object/array preservation | yes |
+| malformed TOON error category | yes |
+| invalid UTF-8 error category | yes |
 
-## Normalization invariants
+## Round-trip principle
 
-These invariants are intentionally tested because they are easy to violate while trying to be clever:
-
-### CSV
-
-CSV is text-first. The adapter does **not** infer types.
+TOON tests prefer semantic equivalence over exact serialized text:
 
 ```text
-001   -> "001"
-true  -> "true"
-      -> ""
+JSON-compatible value
+  -> toon-format encoder
+  -> toon-world TOON decoder
+  -> compact JSON output
+  -> equivalent JSON-compatible value
 ```
 
-If callers want numbers or booleans, they can convert explicitly in jq.
+This proves more than asserting commas, indentation, or quoting from a particular encoder version.
 
-### NDJSON
+The hard-coded TOON table fixture remains intentionally small. Its purpose is to prove toon-world can consume ordinary TOON syntax without requiring its own encoder to have produced the data first.
 
-Each parsed JSON value becomes one ordered array element. Input line order is preserved.
+## Compatibility note
 
-### YAML / TOML
-
-Native scalar types are retained where the parser exposes them through the common value model.
-
-### XML
-
-The structural model preserves element tags, attributes, and ordered child content. Mixed text/element sequences are tested because flattening them would destroy meaning.
+Encoding and decoding both use `toon-format` 0.5.x in this milestone. Tests therefore validate the compatibility contract actually shipped by the dependency, not a newer TOON revision the binary does not yet implement.
 
 ## Adding tests
 
-For each new adapter or behavior, prefer the smallest test that proves one invariant. Add CLI tests only where command routing itself is the behavior; parser semantics belong in direct adapter tests.
-
-Round-trip tests should decode and compare semantic values instead of asserting serializer punctuation whenever possible.
+Any TOON input bug involving information loss should gain a semantic round-trip regression. Syntax-only parsing bugs should use the smallest hand-written TOON fixture that reproduces the issue.

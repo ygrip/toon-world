@@ -1,90 +1,70 @@
 # toon-world roadmap
 
-`toon-world` is a universal query/transform bridge whose default structured output is TOON. The value is not conversion by itself; it is being able to parse different formats, query only the needed data, and emit a compact result through one executable.
+`toon-world` is a universal query/transform bridge whose default structured output is TOON. Conversion exists to make many formats queryable through one compact agent- and shell-friendly pipeline.
 
-## Milestone 0.1 — query core
+## 0.1 — query core
 
-Status: implemented in `feat/query-core`, local verification required.
+Implemented in `feat/query-core`:
 
-- Rust single binary
-- JSON file/stdin input
-- embedded jaq query engine
-- TOON / compact JSON / scalar text output
-- deterministic error categories
-- high-value query/output/CLI tests
+- JSON file/stdin input;
+- embedded jaq;
+- TOON / compact JSON / scalar text output;
+- deterministic error categories and focused tests.
 
-## Milestone 0.2 — structured adapters
+## 0.2 — structured adapters
+
+Implemented in `feat/structured-adapters`:
+
+- NDJSON / JSONL;
+- CSV as header-keyed string data;
+- YAML;
+- TOML;
+- structural XML.
+
+All adapters feed the same common value/query layer.
+
+## 0.3 — TOON input
 
 Status: implemented on this branch, local verification required.
 
-Inputs:
+- `.toon` detection;
+- `--from toon`;
+- TOON decode into the common value model;
+- direct jaq querying;
+- semantic round-trip coverage;
+- compatibility claim pinned to the selected `toon-format` version.
 
-1. NDJSON / JSONL
-2. CSV
-3. YAML
-4. TOML
-5. XML
+## 0.4 — Markdown
 
-The adapter boundary stays independent from the query engine. Queries operate on normalized values, not source syntax.
-
-Normalization decisions:
-
-- NDJSON becomes an ordered array;
-- CSV headers become keys and cells remain strings;
-- YAML/TOML retain native scalar/container types where representable;
-- XML remains structural and preserves ordered mixed content.
-
-## Milestone 0.3 — TOON input
-
-Add TOON decoding as first-class queryable input. Compatibility must remain explicitly pinned to the TOON version supported by the selected Rust implementation.
-
-## Milestone 0.4 — Markdown
-
-Normalize Markdown into a retrieval-oriented document model:
+Normalize Markdown for retrieval:
 
 - title/frontmatter;
-- ordered sections and heading levels;
+- ordered sections + heading levels;
 - paragraphs, code, lists, tables, blockquotes, rules;
-- document links.
+- links.
 
-Add jq helpers such as:
+Planned helper examples:
 
 ```bash
 toon-world README.md -q 'section("Installation")'
 toon-world README.md -q 'section("Usage") | code("bash")'
 ```
 
-Helpers are jaq definitions over the normalized model, not another DSL.
+Helpers remain jaq definitions over the normalized model.
 
-## Milestone 0.5 — HTML
+## 0.5 — HTML
 
-Support two explicit contracts:
+Support default structural DOM and explicit `--semantic` content extraction. Semantic mode keeps title, metadata, sections, text blocks, code, lists, tables, links, images, and forms while excluding scripts/styles.
 
-- default structural DOM model;
-- `--semantic` content-oriented model for agents.
+## 0.6 — measurement
 
-Semantic mode extracts title, metadata, sections, text blocks, code, lists, tables, links, images, and forms while excluding script/style payloads.
+Add `--stats` for raw input bytes vs rendered output bytes, absolute change, and percentage reduction/increase. Tokenizer-specific estimates remain optional future work.
 
-## Milestone 0.6 — measurement
-
-Add `--stats` so optimization claims are measurable rather than decorative.
-
-Initial stats should report at least:
-
-- raw input bytes;
-- rendered output bytes;
-- absolute byte change;
-- percentage reduction/increase.
-
-Tokenizer-specific counts can come later if they do not burden the default binary.
-
-### Explicit non-goal
-
-Do **not** add `--keep`, `--drop`, or `--drop-null` merely as aliases for operations jq already expresses. One query language is enough trouble for civilized society.
+Do not add redundant `--keep`, `--drop`, or `--drop-null` flags while jq already expresses those transformations.
 
 ## Experimental — sparse heterogeneous tables
 
-Research a reversible extension for arrays whose objects overlap but do not share identical fields:
+Research a reversible extension such as:
 
 ```text
 [3]{type,repo,pr,key}:
@@ -100,17 +80,17 @@ Candidate semantics:
 - `""` = empty string;
 - row order preserved.
 
-The experiment only earns a stable format commitment if it beats standard TOON on representative size/token benchmarks **and** remains reliably decodable/comprehensible.
+Only advance this if representative benchmarks show material context savings without sacrificing reliable decoding/comprehension.
 
 ## Release shape
 
-- `0.1`: JSON + jq-compatible query core
-- `0.2`: NDJSON/CSV/YAML/TOML/XML adapters
-- `0.3`: TOON input with pinned compatibility
-- `0.4`: Markdown normalized model + helpers
-- `0.5`: HTML structural/semantic model + helpers
-- `0.6`: byte-size statistics
-- `0.x-experimental`: sparse heterogeneous-table mode
-- `1.0`: stable CLI, documented format contracts, reproducible performance/context benchmarks
+- `0.1`: JSON query core
+- `0.2`: structured adapters
+- `0.3`: TOON input
+- `0.4`: Markdown
+- `0.5`: HTML
+- `0.6`: byte-size stats
+- `0.x-experimental`: sparse tables
+- `1.0`: stable CLI + documented contracts + reproducible benchmarks
 
-See [`MILESTONES.md`](MILESTONES.md) for the stacked PR chain and [`TESTING.md`](TESTING.md) for local verification and coverage expectations.
+See [`MILESTONES.md`](MILESTONES.md) and [`TESTING.md`](TESTING.md).

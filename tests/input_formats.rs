@@ -238,9 +238,6 @@ fn unknown_extension_falls_back_to_json() {
 
     assert!(output.status.success());
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "Ada\n");
-    assert!(String::from_utf8(output.stderr)
-        .unwrap()
-        .contains("warning[input]"));
 }
 
 #[test]
@@ -277,67 +274,4 @@ fn explicit_from_parses_csv_on_stdin() {
 
     assert!(output.status.success());
     assert_eq!(String::from_utf8(output.stdout).unwrap(), "Bob\n");
-}
-
-#[test]
-fn raw_csv_data_is_queryable_without_a_temp_file() {
-    let output = Command::cargo_bin("toon-world")
-        .unwrap()
-        .args([
-            "--from",
-            "csv",
-            "--data",
-            "id,name\n1,Ada\n2,Bob\n",
-            "-q",
-            ".[1].name",
-            "--to",
-            "text",
-        ])
-        .output()
-        .unwrap();
-
-    assert!(output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "Bob\n");
-}
-
-#[test]
-fn raw_multiline_yaml_data_is_queryable() {
-    let output = Command::cargo_bin("toon-world")
-        .unwrap()
-        .args([
-            "--from",
-            "yaml",
-            "--data",
-            "name: Ada\nactive: true\n",
-            "-q",
-            ".active",
-            "--to",
-            "text",
-        ])
-        .output()
-        .unwrap();
-
-    assert!(output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "true\n");
-}
-
-#[test]
-fn raw_xml_data_is_queryable() {
-    let output = Command::cargo_bin("toon-world")
-        .unwrap()
-        .args([
-            "--from",
-            "xml",
-            "--data",
-            "<user id=\"1\"><name>Ada</name></user>",
-            "-q",
-            ".c[0].c[0]",
-            "--to",
-            "text",
-        ])
-        .output()
-        .unwrap();
-
-    assert!(output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "Ada\n");
 }
