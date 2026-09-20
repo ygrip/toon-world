@@ -49,4 +49,3 @@ fn warnings_as_errors_blocks_result_output() {
         .unwrap()
         .contains("error[warning-as-error]"));
 }
-}
