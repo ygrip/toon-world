@@ -53,15 +53,7 @@ fn parses_raw_data_with_explicit_format() {
 
 #[test]
 fn dash_and_toon_can_be_combined_for_stdin() {
-    let args = Args::try_parse_from([
-        "toon-world",
-        "-",
-        "--from",
-        "toon",
-        "--to",
-        "text",
-    ])
-    .unwrap();
+    let args = Args::try_parse_from(["toon-world", "-", "--from", "toon", "--to", "text"]).unwrap();
 
     assert_eq!(args.file, Some(PathBuf::from("-")));
     assert_eq!(args.from, Some(InputFormat::Toon));

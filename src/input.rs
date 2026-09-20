@@ -9,6 +9,7 @@ use jaq_json::Val;
 
 use crate::cli::InputFormat;
 use crate::diagnostics::Warning;
+use crate::markdown;
 
 pub struct ReadResult {
     pub value: Val,
@@ -30,7 +31,10 @@ pub fn read(
     Ok(ReadResult { value, warnings })
 }
 
-fn resolve_format(path: Option<&Path>, explicit_format: Option<InputFormat>) -> (InputFormat, Vec<Warning>) {
+fn resolve_format(
+    path: Option<&Path>,
+    explicit_format: Option<InputFormat>,
+) -> (InputFormat, Vec<Warning>) {
     if let Some(format) = explicit_format {
         return (format, Vec::new());
     }
@@ -40,7 +44,10 @@ fn resolve_format(path: Option<&Path>, explicit_format: Option<InputFormat>) -> 
     if let Some(format) = detect_format(path) {
         return (format, Vec::new());
     }
-    let reason = path.extension().and_then(|extension| extension.to_str()).filter(|extension| !extension.is_empty())
+    let reason = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .filter(|extension| !extension.is_empty())
         .map(|extension| format!("unknown extension '.{extension}'"))
         .unwrap_or_else(|| "could not infer format from filename".to_owned());
     (
@@ -58,6 +65,7 @@ pub fn detect_format(path: &Path) -> Option<InputFormat> {
         "toml" => Some(InputFormat::Toml),
         "xml" | "xhtml" => Some(InputFormat::Xml),
         "toon" => Some(InputFormat::Toon),
+        "md" | "markdown" => Some(InputFormat::Markdown),
         _ => None,
     }
 }
@@ -73,6 +81,7 @@ pub fn parse_bytes(bytes: &[u8], format: InputFormat) -> Result<Val> {
             .map_err(|error| anyhow!("error[parse:toml]: {error}")),
         InputFormat::Xml => parse_xml(as_utf8(bytes, "xml")?),
         InputFormat::Toon => parse_toon(as_utf8(bytes, "toon")?),
+        InputFormat::Markdown => markdown::parse(as_utf8(bytes, "markdown")?),
     }
 }
 
@@ -86,7 +95,10 @@ fn read_bytes(path: Option<&Path>) -> Result<Vec<u8>> {
                 .with_context(|| format!("error[input]: could not read {}", path.display()))?;
         }
         _ => {
-            stdin().lock().read_to_end(&mut bytes).context("error[input]: could not read stdin")?;
+            stdin()
+                .lock()
+                .read_to_end(&mut bytes)
+                .context("error[input]: could not read stdin")?;
         }
     }
     Ok(bytes)
@@ -101,16 +113,26 @@ fn parse_ndjson(bytes: &[u8]) -> Result<Val> {
 
 fn parse_csv(bytes: &[u8]) -> Result<Val> {
     let mut reader = csv::ReaderBuilder::new().from_reader(bytes);
-    let headers = reader.headers().map_err(|error| anyhow!("error[parse:csv]: {error}"))?.clone();
+    let headers = reader
+        .headers()
+        .map_err(|error| anyhow!("error[parse:csv]: {error}"))?
+        .clone();
     let mut seen = HashSet::new();
     for header in headers.iter() {
-        if header.is_empty() { bail!("error[parse:csv]: header names must not be empty"); }
-        if !seen.insert(header.to_owned()) { bail!("error[parse:csv]: duplicate header '{header}'"); }
+        if header.is_empty() {
+            bail!("error[parse:csv]: header names must not be empty");
+        }
+        if !seen.insert(header.to_owned()) {
+            bail!("error[parse:csv]: duplicate header '{header}'");
+        }
     }
     let mut rows = Vec::new();
     for record in reader.records() {
         let record = record.map_err(|error| anyhow!("error[parse:csv]: {error}"))?;
-        let fields = headers.iter().zip(record.iter()).map(|(header, cell)| (header.to_owned().into(), cell.to_owned().into()));
+        let fields = headers
+            .iter()
+            .zip(record.iter())
+            .map(|(header, cell)| (header.to_owned().into(), cell.to_owned().into()));
         rows.push(Val::obj(fields.collect()));
     }
     Ok(rows.into_iter().collect())
@@ -164,9 +186,14 @@ fn parse_toon(input: &str) -> Result<Val> {
 }
 
 fn collapse_single(values: Vec<Val>) -> Val {
-    if values.len() == 1 { values.into_iter().next().expect("length checked") } else { values.into_iter().collect() }
+    if values.len() == 1 {
+        values.into_iter().next().expect("length checked")
+    } else {
+        values.into_iter().collect()
+    }
 }
 
 fn as_utf8<'a>(bytes: &'a [u8], format: &str) -> Result<&'a str> {
-    str::from_utf8(bytes).with_context(|| format!("error[parse:{format}]: input must be valid UTF-8"))
+    str::from_utf8(bytes)
+        .with_context(|| format!("error[parse:{format}]: input must be valid UTF-8"))
 }

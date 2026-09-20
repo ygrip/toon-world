@@ -3,6 +3,12 @@ use jaq_core::load::{Arena, File, Loader};
 use jaq_core::{data, unwrap_valr, Ctx, Vars};
 use jaq_json::Val;
 
+const TOON_WORLD_HELPERS: &str = r#"
+def section($name): .sections[]? | select(.heading == $name);
+def code($lang): .blocks[]? | select(.type == "code" and .lang == $lang);
+def links: .links[]?;
+"#;
+
 pub fn execute(query: &str, input: Val) -> Result<Vec<Val>> {
     let defs = jaq_core::defs()
         .chain(jaq_std::defs())
@@ -11,13 +17,14 @@ pub fn execute(query: &str, input: Val) -> Result<Vec<Val>> {
         .chain(jaq_std::funs())
         .chain(jaq_json::funs());
 
+    let source = format!("{TOON_WORLD_HELPERS}\n{query}");
     let loader = Loader::new(defs);
     let arena = Arena::default();
     let modules = loader
         .load(
             &arena,
             File {
-                code: query,
+                code: &source,
                 path: (),
             },
         )

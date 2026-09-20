@@ -6,15 +6,15 @@ Each implementation milestone is developed as a separate, stacked pull request s
 | --- | --- | --- | --- |
 | 0.1 | `feat/query-core` | JSON + jq-compatible query core + TOON/JSON/text output | inherited |
 | 0.2 | `feat/structured-adapters` | NDJSON, CSV, YAML, TOML, XML input adapters | inherited |
-| 0.3 | `feat/toon-input` | TOON as a queryable input format | implemented, local verification required |
-| 0.4 | `feat/markdown-adapter` | Markdown normalized document model + helpers | later stacked PR |
+| 0.3 | `feat/toon-input` | TOON as a queryable input format | inherited |
+| 0.4 | `feat/markdown-adapter` | Markdown normalized document model + helpers | implemented, local verification required |
 | 0.5 | `feat/html-adapter` | HTML structural/semantic normalized models + helpers | later stacked PR |
 | 0.6 | `feat/context-stats` | byte-size statistics for input and rendered output | later stacked PR |
 | experimental | `feat/sparse-tables` | reversible sparse heterogeneous-table experiment | research milestone |
 
 ## Verification policy
 
-CI is intentionally disabled during these initial milestones. Run locally:
+CI is intentionally disabled. Run locally:
 
 ```bash
 cargo fmt --check
@@ -23,30 +23,35 @@ cargo test --all-features
 cargo build --release
 ```
 
-Every milestone PR carries milestone-specific tests, smoke commands, and updated README/roadmap/testing documentation.
+Every milestone must keep README, roadmap, milestone status, testing matrix, and PR-local smoke commands synchronized with the actual branch behavior.
 
-## 0.3 TOON contract
+## 0.4 Markdown contract
 
-TOON is decoded into a JSON-compatible value and then enters the same jaq query pipeline as every other structured input:
+Markdown is normalized into a compact retrieval-oriented model:
 
 ```text
-TOON -> decode -> common value -> jaq -> TOON / JSON / text
+type: markdown
+title: first H1 or null
+frontmatter: raw metadata text or null
+sections[]:
+  heading
+  level
+  blocks[]
+links[]
 ```
 
-This branch deliberately uses the same `toon-format` dependency for encode and decode. The compatibility claim is therefore limited to the TOON version that dependency documents, currently v3.0 for the selected 0.5.x release.
+Typed blocks cover paragraphs, code, lists, tables, blockquotes, rules, and raw HTML blocks. Inline formatting contributes text meaning rather than creating a formatting AST.
 
-Tests defend:
+Helpers are ordinary jaq definitions over the model:
 
-- hand-written tabular TOON consumption;
-- semantic round-trip of nested and heterogeneous values;
-- absent vs null vs empty-string distinctions;
-- empty containers;
-- query result ordering;
-- malformed/invalid UTF-8 errors;
-- extension detection and explicit overrides.
+```jq
+section("Installation")
+section("Usage") | code("bash")
+links
+```
 
-See [`TESTING.md`](TESTING.md) for the complete inherited + 0.3 matrix.
+Tests cover preambles, missing/duplicate headings, code with and without language, task lists, tables, blockquotes, rules, raw HTML, link metadata, extension/override routing, and invalid UTF-8. See [`TESTING.md`](TESTING.md).
 
 ## Stacked review rule
 
-PR 0.3 is based on `feat/structured-adapters`. Review against that branch so the PR shows the TOON-input delta instead of reenacting milestones 0.1 and 0.2 for sport.
+PR 0.4 is based on `feat/toon-input`. Review against that branch so Markdown remains one comprehensible milestone rather than a four-season recap of every earlier PR.

@@ -15,7 +15,8 @@ fn main() {
 fn run() -> Result<()> {
     let args = Args::parse();
     let input = input::read(args.file.as_deref(), args.from, args.data.as_deref())?;
-    let rendered_warnings = diagnostics::resolve_warnings(&input.warnings, args.quiet, args.warnings_as_errors)?;
+    let rendered_warnings =
+        diagnostics::resolve_warnings(&input.warnings, args.quiet, args.warnings_as_errors)?;
     if !rendered_warnings.is_empty() {
         eprintln!("{rendered_warnings}");
     }

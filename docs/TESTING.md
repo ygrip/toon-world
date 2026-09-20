@@ -1,8 +1,6 @@
 # Testing toon-world
 
-CI is intentionally disabled during the initial milestone chain. Local verification is the source of truth until CI is re-enabled.
-
-The suite targets behavioral contracts and silent-data-loss risks rather than chasing a decorative line-coverage percentage.
+CI is intentionally disabled during the initial milestone chain. Local verification remains authoritative.
 
 ## Required local verification
 
@@ -13,61 +11,65 @@ cargo test --all-features
 cargo build --release
 ```
 
-A milestone is not locally verified until all four commands succeed.
+A branch is not considered locally verified until all four commands succeed.
 
 ## Inherited coverage
 
-Milestone 0.3 includes the complete query/output coverage from 0.1 and structured-adapter coverage from 0.2:
+Milestone 0.4 inherits the structured/query coverage from earlier milestones, including:
 
-- query identity, filtering, projection, errors, ordered/empty streams;
-- CLI defaults, stdin/file routing, missing-file errors;
-- TOON output semantic round-trip and JSON/text output boundaries;
-- NDJSON ordering;
-- CSV text preservation, quoting/CRLF, invalid headers;
-- YAML native types, aliases, and multi-documents;
-- nested TOML;
-- XML attributes, ordered children, mixed content, multi-root input;
-- format detection, overrides, malformed input, UTF-8 errors.
+- jq query and output boundaries;
+- file/stdin/CLI error behavior;
+- JSON, NDJSON, CSV, YAML, TOML, XML adapters;
+- TOON decode and semantic round-trips.
 
-## TOON input coverage introduced in 0.3
+## Markdown coverage introduced in 0.4
 
 | Contract | Covered |
 | --- | --- |
-| `.toon` extension detection | yes |
-| case-insensitive TOON extension | yes |
-| explicit `--from toon` | yes |
-| explicit TOON stdin | yes |
-| explicit TOON override over misleading extension | yes |
-| standard tabular TOON query | yes |
-| multiple query results preserve order | yes |
-| JSON -> TOON -> decoder -> JSON semantic round-trip | yes |
-| absent property vs `null` vs empty string | yes |
-| nested objects/arrays | yes |
-| heterogeneous nested values | yes |
-| empty object/array preservation | yes |
-| malformed TOON error category | yes |
+| `.md` / `.markdown` detection | yes |
+| case-insensitive Markdown extension | yes |
+| explicit `--from markdown` | yes |
+| explicit override over misleading extension | yes |
+| title from first H1 | yes |
+| no-H1 title remains null | yes |
+| preamble before first heading retained | yes |
+| section order | yes |
+| heading levels | yes |
+| YAML-style frontmatter retained raw | yes |
+| paragraph normalization | yes |
+| inline emphasis/code flattened to text meaning | yes |
+| duplicate heading lookup preserves order | yes |
+| missing `section()` returns empty stream | yes |
+| fenced code language | yes |
+| code block without language uses null | yes |
+| `code("lang")` helper | yes |
+| list normalization | yes |
+| task-list markers | yes |
+| table headers/rows | yes |
+| blockquotes | yes |
+| horizontal rules | yes |
+| raw HTML block retention | yes |
+| link text/href/title index | yes |
 | invalid UTF-8 error category | yes |
 
-## Round-trip principle
+## Document test philosophy
 
-TOON tests prefer semantic equivalence over exact serialized text:
+Markdown normalization is retrieval-oriented, not byte-identical reconstruction. Tests therefore defend **document meaning and queryability**, not which Markdown spelling produced it.
 
-```text
-JSON-compatible value
-  -> toon-format encoder
-  -> toon-world TOON decoder
-  -> compact JSON output
-  -> equivalent JSON-compatible value
+For example, emphasis nodes are intentionally flattened:
+
+```md
+Use **bold**, *italic*, and `code`.
 ```
 
-This proves more than asserting commas, indentation, or quoting from a particular encoder version.
+becomes semantic paragraph text equivalent to:
 
-The hard-coded TOON table fixture remains intentionally small. Its purpose is to prove toon-world can consume ordinary TOON syntax without requiring its own encoder to have produced the data first.
+```text
+Use bold, italic, and code.
+```
 
-## Compatibility note
+Likewise, `section("Name")` is tested as a jaq helper over the normalized `sections` array. Duplicate headings are allowed and must return multiple values in source order.
 
-Encoding and decoding both use `toon-format` 0.5.x in this milestone. Tests therefore validate the compatibility contract actually shipped by the dependency, not a newer TOON revision the binary does not yet implement.
+## Regression rule
 
-## Adding tests
-
-Any TOON input bug involving information loss should gain a semantic round-trip regression. Syntax-only parsing bugs should use the smallest hand-written TOON fixture that reproduces the issue.
+When a Markdown bug is reported, prefer a minimal source fragment plus an assertion on the normalized value or helper output. Avoid snapshotting the entire document unless the whole schema is under test; enormous snapshots mostly prove that enormous snapshots can be reviewed poorly.
