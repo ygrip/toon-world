@@ -16,6 +16,7 @@ struct Field {
 enum FieldKind {
     Leaf,
     Object(Schema),
+    Table(Schema),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -128,6 +129,10 @@ fn row_matches_schema(schema: &Schema, object: &Map<String, Value>) -> bool {
             (FieldKind::Object(nested), Some(Value::Object(child))) => {
                 row_matches_schema(nested, child)
             }
+            (FieldKind::Table(nested), Some(Value::Array(items))) => items.iter().all(|item| {
+                item.as_object()
+                    .is_some_and(|item| row_matches_schema(nested, item))
+            }),
             _ => false,
         })
 }
@@ -138,6 +143,21 @@ fn merge_schema(schema: &mut Schema, object: &Map<String, Value>, depth: usize) 
     }
     for (key, value) in object {
         let observed = match value {
+            Value::Array(items) if !items.is_empty() && items.iter().all(Value::is_object) => {
+                let mut nested = Schema::default();
+                for item in items {
+                    let item = item
+                        .as_object()
+                        .expect("checked all items are objects above");
+                    if !merge_schema(&mut nested, item, depth + 1)? {
+                        return Ok(false);
+                    }
+                }
+                if nested.fields.is_empty() {
+                    continue;
+                }
+                FieldKind::Table(nested)
+            }
             Value::Array(_) => continue,
             Value::Object(map) if map.is_empty() => continue,
             Value::Object(map) => {
@@ -155,6 +175,11 @@ fn merge_schema(schema: &mut Schema, object: &Map<String, Value>, depth: usize) 
         match schema.indices.get(key).copied() {
             Some(index) => match (&mut schema.fields[index].kind, observed) {
                 (FieldKind::Object(existing), FieldKind::Object(observed)) => {
+                    if !merge_fields(existing, observed) {
+                        return Ok(false);
+                    }
+                }
+                (FieldKind::Table(existing), FieldKind::Table(observed)) => {
                     if !merge_fields(existing, observed) {
                         return Ok(false);
                     }
@@ -180,6 +205,11 @@ fn merge_fields(existing: &mut Schema, observed: Schema) -> bool {
         match existing.indices.get(&field.key).copied() {
             Some(index) => match (&mut existing.fields[index].kind, field.kind) {
                 (FieldKind::Object(current), FieldKind::Object(nested)) => {
+                    if !merge_fields(current, nested) {
+                        return false;
+                    }
+                }
+                (FieldKind::Table(current), FieldKind::Table(nested)) => {
                     if !merge_fields(current, nested) {
                         return false;
                     }
@@ -211,16 +241,31 @@ fn render_table(
     output.push_str(&format!("[{}]{{", values.len()));
     render_fields(schema, output)?;
     output.push_str("}:\n");
+    render_table_rows(schema, values, indent + 2, output)
+}
+
+fn render_table_rows(
+    schema: &Schema,
+    values: &[Value],
+    indent: usize,
+    output: &mut String,
+) -> Result<()> {
     for value in values {
         let object = value
             .as_object()
             .ok_or_else(|| anyhow!("error[encode:sparse-toon]: table row must be an object"))?;
         let mut cells = Vec::new();
         collect_cells(&schema.fields, object, &mut cells)?;
-        output.push_str(&" ".repeat(indent + 2));
-        output.push_str(&cells.join(","));
+        output.push_str(&" ".repeat(indent));
+        if cells.is_empty() {
+            // A row line must not be blank: parse_lines() treats whitespace-only
+            // lines as filler and drops them, which would lose this row entirely.
+            output.push('~');
+        } else {
+            output.push_str(&cells.join(","));
+        }
         output.push('\n');
-        render_attachments(object, indent + 4, output)?;
+        render_attachments(schema, object, indent + 2, output)?;
     }
     Ok(())
 }
@@ -245,10 +290,18 @@ fn render_fields(schema: &Schema, output: &mut String) -> Result<()> {
             output.push(',');
         }
         output.push_str(&render_key(&field.key)?);
-        if let FieldKind::Object(nested) = &field.kind {
-            output.push('{');
-            render_fields(nested, output)?;
-            output.push('}');
+        match &field.kind {
+            FieldKind::Object(nested) => {
+                output.push('{');
+                render_fields(nested, output)?;
+                output.push('}');
+            }
+            FieldKind::Table(nested) => {
+                output.push_str("[]{");
+                render_fields(nested, output)?;
+                output.push('}');
+            }
+            FieldKind::Leaf => {}
         }
     }
     Ok(())
@@ -273,6 +326,7 @@ fn collect_cells(
                 None => cells.extend((0..leaf_count(nested)).map(|_| "~".to_owned())),
                 Some(_) => bail!("error[encode:sparse-toon]: conflicting table row shape"),
             },
+            FieldKind::Table(_) => {}
         }
     }
     Ok(())
@@ -313,21 +367,49 @@ fn render_key(key: &str) -> Result<String> {
 }
 
 fn render_attachments(
+    schema: &Schema,
     object: &Map<String, Value>,
     indent: usize,
     output: &mut String,
 ) -> Result<()> {
     for (key, value) in object {
-        match value {
-            Value::Array(values) => render_array_attachment(key, values, indent, output)?,
-            Value::Object(child) if child.is_empty() => {
-                output.push_str(&format!("{}{}:\n", " ".repeat(indent), render_key(key)?));
+        match schema.indices.get(key).map(|&index| &schema.fields[index].kind) {
+            Some(FieldKind::Leaf) => {}
+            Some(FieldKind::Table(nested)) => {
+                let items = value.as_array().ok_or_else(|| {
+                    anyhow!("error[encode:sparse-toon]: conflicting table row shape")
+                })?;
+                output.push_str(&" ".repeat(indent));
+                output.push_str(&render_key(key)?);
+                output.push_str(&format!("[{}]:\n", items.len()));
+                render_table_rows(nested, items, indent + 2, output)?;
             }
-            Value::Object(child) if has_attachments(child) => {
-                output.push_str(&format!("{}{}:\n", " ".repeat(indent), render_key(key)?));
-                render_attachments(child, indent + 2, output)?;
+            Some(FieldKind::Object(nested)) => {
+                let child = value.as_object().ok_or_else(|| {
+                    anyhow!("error[encode:sparse-toon]: conflicting table row shape")
+                })?;
+                if child.is_empty() {
+                    output.push_str(&format!("{}{}:\n", " ".repeat(indent), render_key(key)?));
+                } else {
+                    let mut nested_output = String::new();
+                    render_attachments(nested, child, indent + 2, &mut nested_output)?;
+                    if !nested_output.is_empty() {
+                        output.push_str(&format!("{}{}:\n", " ".repeat(indent), render_key(key)?));
+                        output.push_str(&nested_output);
+                    }
+                }
             }
-            _ => {}
+            None => match value {
+                Value::Array(values) => render_array_attachment(key, values, indent, output)?,
+                Value::Object(child) if child.is_empty() => {
+                    output.push_str(&format!("{}{}:\n", " ".repeat(indent), render_key(key)?));
+                }
+                Value::Object(child) if has_attachments(child) => {
+                    output.push_str(&format!("{}{}:\n", " ".repeat(indent), render_key(key)?));
+                    render_attachments(&Schema::default(), child, indent + 2, output)?;
+                }
+                _ => {}
+            },
         }
     }
     Ok(())
@@ -383,6 +465,7 @@ fn leaf_count(schema: &Schema) -> usize {
         .map(|field| match &field.kind {
             FieldKind::Leaf => 1,
             FieldKind::Object(nested) => leaf_count(nested),
+            FieldKind::Table(_) => 0,
         })
         .sum()
 }
@@ -503,13 +586,19 @@ fn parse_fields(input: &str, depth: usize) -> Result<Schema> {
                 if matching_brace(&entry[open..])? != entry.len() - open - 1 {
                     bail!("error[parse:sparse-toon]: invalid nested field group");
                 }
-                Ok(Field {
-                    key: parse_key(&entry[..open])?,
-                    kind: FieldKind::Object(parse_fields(
-                        &entry[open + 1..entry.len() - 1],
-                        depth + 1,
-                    )?),
-                })
+                let key_part = &entry[..open];
+                let nested = parse_fields(&entry[open + 1..entry.len() - 1], depth + 1)?;
+                if let Some(base) = key_part.strip_suffix("[]") {
+                    Ok(Field {
+                        key: parse_key(base)?,
+                        kind: FieldKind::Table(nested),
+                    })
+                } else {
+                    Ok(Field {
+                        key: parse_key(key_part)?,
+                        kind: FieldKind::Object(nested),
+                    })
+                }
             } else {
                 Ok(Field {
                     key: parse_key(&entry)?,
@@ -610,36 +699,52 @@ fn parse_table(
         .fields
         .ok_or_else(|| anyhow!("error[parse:sparse-toon]: sparse table requires fields"))?;
     *index += 1;
+    let rows = parse_table_body(lines, index, indent + 2, header.count, &fields)?;
+    Ok(Value::Array(rows))
+}
+
+fn parse_table_body(
+    lines: &[Line],
+    index: &mut usize,
+    row_indent: usize,
+    count: usize,
+    fields: &Schema,
+) -> Result<Vec<Value>> {
     if fields.fields.is_empty() {
-        return Ok(Value::Array(
-            (0..header.count)
-                .map(|_| Value::Object(Map::new()))
-                .collect(),
-        ));
+        return Ok((0..count).map(|_| Value::Object(Map::new())).collect());
     }
-    let mut rows = Vec::with_capacity(header.count.min(lines.len()));
-    for _ in 0..header.count {
+    let mut rows = Vec::with_capacity(count.min(lines.len()));
+    for _ in 0..count {
         let row_line = lines
             .get(*index)
             .ok_or_else(|| anyhow!("error[parse:sparse-toon]: missing table row"))?;
-        if row_line.indent != indent + 2 {
+        if row_line.indent != row_indent {
             bail!("error[parse:sparse-toon]: invalid table row indentation");
         }
-        let cells = split_cells(&row_line.text)?;
-        if cells.len() != leaf_count(&fields) {
-            bail!(
-                "error[parse:sparse-toon]: expected {} cells, found {}",
-                leaf_count(&fields),
-                cells.len()
-            );
-        }
+        let expected = leaf_count(fields);
+        let cells = if expected == 0 {
+            if row_line.text != "~" {
+                bail!("error[parse:sparse-toon]: expected empty row marker '~'");
+            }
+            Vec::new()
+        } else {
+            let cells = split_cells(&row_line.text)?;
+            if cells.len() != expected {
+                bail!(
+                    "error[parse:sparse-toon]: expected {} cells, found {}",
+                    expected,
+                    cells.len()
+                );
+            }
+            cells
+        };
         let mut cell_index = 0;
-        let mut object = decode_row(&fields, &cells, &mut cell_index)?;
+        let mut object = decode_row(fields, &cells, &mut cell_index)?;
         *index += 1;
-        parse_attachments(lines, index, indent + 4, &mut object)?;
+        parse_attachments(lines, index, row_indent + 2, fields, &mut object)?;
         rows.push(Value::Object(object));
     }
-    Ok(Value::Array(rows))
+    Ok(rows)
 }
 
 fn decode_row(fields: &Schema, cells: &[String], index: &mut usize) -> Result<Map<String, Value>> {
@@ -663,6 +768,7 @@ fn decode_row(fields: &Schema, cells: &[String], index: &mut usize) -> Result<Ma
                     object.insert(field.key.clone(), Value::Object(child));
                 }
             }
+            FieldKind::Table(_) => {}
         }
     }
     Ok(object)
@@ -672,6 +778,7 @@ fn parse_attachments(
     lines: &[Line],
     index: &mut usize,
     indent: usize,
+    schema: &Schema,
     object: &mut Map<String, Value>,
 ) -> Result<()> {
     while let Some(line) = lines.get(*index) {
@@ -698,6 +805,20 @@ fn parse_attachments(
                 merge_value(object, key, Value::Array(Vec::new()))?;
                 continue;
             }
+            if header.fields.is_none() && header.inline.is_empty() {
+                if let Some(FieldKind::Table(nested)) = header
+                    .key
+                    .as_ref()
+                    .and_then(|key| schema.indices.get(key))
+                    .map(|&position| &schema.fields[position].kind)
+                {
+                    let key = header.key.clone().expect("checked above");
+                    *index += 1;
+                    let rows = parse_table_body(lines, index, indent + 2, header.count, nested)?;
+                    merge_value(object, key, Value::Array(rows))?;
+                    continue;
+                }
+            }
             parse_standard_attachment(lines, index, indent, object)?;
             continue;
         }
@@ -709,7 +830,15 @@ fn parse_attachments(
                     Some(_) => bail!("error[parse:sparse-toon]: conflicting attachment value"),
                     None => Map::new(),
                 };
-                parse_attachments(lines, index, indent + 2, &mut child)?;
+                let empty = Schema::default();
+                let nested = match schema.indices.get(&key) {
+                    Some(&position) => match &schema.fields[position].kind {
+                        FieldKind::Object(nested) => nested,
+                        _ => &empty,
+                    },
+                    None => &empty,
+                };
+                parse_attachments(lines, index, indent + 2, nested, &mut child)?;
                 object.insert(key, Value::Object(child));
                 continue;
             }

@@ -49,9 +49,10 @@ fn compact_escapes_pointer_keys_and_references_nested_arrays() {
     ]);
     let rendered = sparse::encode(&original).unwrap().unwrap();
 
-    assert!(rendered.starts_with("[2]{\"a/b\"{\"til~de\"}}:\n"));
-    assert!(rendered.contains("items[1]{name}:"));
+    assert!(rendered.starts_with("[2]{\"a/b\"{\"til~de\"},items[]{name}}:\n"));
+    assert!(rendered.contains("items[1]:"));
     assert!(rendered.contains("items[0]:"));
+    assert!(!rendered.contains("items[1]{name}"));
     assert!(!rendered.contains("root=^") && !rendered.contains("^0="));
     assert_eq!(decoded(&rendered), original);
 }
@@ -86,8 +87,11 @@ fn recursive_v1_round_trips_cucumber_shaped_nested_data() {
     }]);
     let rendered = sparse::encode(&original).unwrap().unwrap();
 
-    assert!(rendered.starts_with("[1]{uri}:\n"));
-    assert!(rendered.contains("    tags[1]{name,location{line,column}}:"));
+    assert!(rendered.starts_with(
+        "[1]{uri,tags[]{name,location{line,column}},elements[]{"
+    ));
+    assert!(!rendered.contains("tags[1]{name"));
+    assert!(rendered.contains("    tags[1]:\n"));
     assert!(rendered.contains("    elements[1]:"));
     assert!(!rendered.contains("@toon-world/sparse-v1"));
     assert_eq!(decoded(&rendered), original);
@@ -140,9 +144,9 @@ fn compact_renders_nested_object_columns_and_child_tables() {
     assert_eq!(
         rendered,
         concat!(
-            "[2]{uri,keyword}:\n",
+            "[2]{uri,keyword,elements[]{id,name}}:\n",
             "  a.feature,Feature\n",
-            "    elements[2]{id,name}:\n",
+            "    elements[2]:\n",
             "      1,Login\n",
             "      2,Logout\n",
             "  b.feature,~\n",
@@ -150,6 +154,60 @@ fn compact_renders_nested_object_columns_and_child_tables() {
         )
     );
     assert_eq!(decoded(&rendered), original);
+}
+
+#[test]
+fn compact_hoists_shared_item_array_schema_once() {
+    let original = json!([
+        {"id": "D-1", "items": [{"sku": "A1", "qty": 2}, {"sku": "A2", "qty": 1}]},
+        {"id": "D-2", "items": [{"sku": "B1", "qty": 1}]},
+        {"id": "D-3", "items": []}
+    ]);
+    let rendered = sparse::encode(&original).unwrap().unwrap();
+
+    assert!(rendered.starts_with("[3]{id,items[]{sku,qty}}:\n"));
+    assert_eq!(rendered.matches("sku,qty").count(), 1);
+    assert!(rendered.contains("    items[2]:\n"));
+    assert!(rendered.contains("    items[1]:\n"));
+    assert!(rendered.contains("    items[0]:\n"));
+    assert_eq!(decoded(&rendered), original);
+}
+
+#[test]
+fn compact_hoists_table_nested_inside_table() {
+    let original = json!([
+        {
+            "id": 1,
+            "groups": [{"name": "g1", "members": [{"m": "a"}, {"m": "b"}]}]
+        },
+        {"id": 2, "groups": []}
+    ]);
+    let rendered = sparse::encode(&original).unwrap().unwrap();
+
+    assert!(rendered.starts_with("[2]{id,groups[]{name,members[]{m}}}:\n"));
+    assert_eq!(decoded(&rendered), original);
+}
+
+#[test]
+fn compact_hoists_table_nested_inside_object() {
+    let original = json!([
+        {"a": {"tags": [{"k": "x", "v": 1}]}},
+        {"a": {}}
+    ]);
+    let rendered = sparse::encode(&original).unwrap().unwrap();
+
+    assert!(rendered.starts_with("[2]{a{tags[]{k,v}}}:\n"));
+    // The row has no leaf cells at all (its only field is a nested table),
+    // so it must not render as a blank line (parse_lines drops those).
+    assert!(rendered.contains("  ~\n"));
+    assert_eq!(decoded(&rendered), original);
+}
+
+#[test]
+fn compact_declines_table_vs_object_conflict() {
+    let original = json!([{"value": {"x": 1}}, {"value": [{"x": 1}]}]);
+
+    assert!(sparse::encode(&original).unwrap().is_none());
 }
 
 #[test]
