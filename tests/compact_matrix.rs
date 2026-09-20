@@ -6,7 +6,7 @@ mod support;
 #[test]
 fn generated_production_matrix_round_trips() {
     let fixtures = support::fixtures();
-    assert_eq!(fixtures.len(), 27);
+    assert_eq!(fixtures.len(), 36);
     for fixture in fixtures {
         let rendered = sparse::encode(&fixture.value)
             .unwrap_or_else(|error| panic!("{} failed to encode: {error}", fixture.name))

@@ -9,8 +9,9 @@ Every fixture compares same source data in four forms: compact JSON input, stand
 | `flat` | Rows with an `id` plus 12 optional scalar columns |
 | `nested` | Rows with optional `profile.identity` and `profile.location` leaves |
 | `child-tables` | Rows with three repeated `events` child objects, each with optional scalar attributes |
+| `root-object` | A root object (not an array) holding an `items` array of `rows` delivery-shaped objects, each with an optional nested `usage.tokens`/`usage.cost` and an optional `usage.by_agent` child table, plus a sibling `scope_counts` object — mirrors a real API response shape like `{"items": [...], "scope_counts": {...}}` |
 
-`r100-missing30pct` means 100 rows with 30% target missing optional fields. Small fixtures approximate this target; 100- and 1,000-row fixtures reach it exactly.
+`r100-missing30pct` means 100 rows with 30% target missing optional fields; for `root-object`, "rows" is the number of items in the nested `items` array. Small fixtures approximate this target; 100- and 1,000-row fixtures reach it exactly.
 
 Run size/token reporting and regression tests:
 

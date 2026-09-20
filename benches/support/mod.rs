@@ -2,13 +2,22 @@ use serde_json::{json, Map, Value};
 
 pub const ROW_COUNTS: [usize; 3] = [10, 100, 1_000];
 pub const SPARSITY_PERCENTS: [u8; 3] = [10, 30, 70];
-pub const SHAPES: [Shape; 3] = [Shape::Shallow, Shape::Deep, Shape::Children];
+pub const SHAPES: [Shape; 4] = [
+    Shape::Shallow,
+    Shape::Deep,
+    Shape::Children,
+    Shape::RootObject,
+];
 
 #[derive(Clone, Copy)]
 pub enum Shape {
     Shallow,
     Deep,
     Children,
+    /// A root object (not an array) holding a nested item array plus sibling
+    /// scalar/object fields, matching an API response like
+    /// `{"items": [...], "scope_counts": {...}}`.
+    RootObject,
 }
 
 impl Shape {
@@ -17,6 +26,7 @@ impl Shape {
             Self::Shallow => "flat",
             Self::Deep => "nested",
             Self::Children => "child-tables",
+            Self::RootObject => "root-object",
         }
     }
 }
@@ -42,12 +52,16 @@ pub fn fixtures() -> Vec<Fixture> {
 }
 
 fn generate(rows: usize, sparsity: u8, shape: Shape) -> Value {
+    if let Shape::RootObject = shape {
+        return root_object(rows, sparsity);
+    }
     Value::Array(
         (0..rows)
             .map(|row| match shape {
                 Shape::Shallow => shallow_row(row, sparsity),
                 Shape::Deep => deep_row(row, sparsity),
                 Shape::Children => children_row(row, sparsity),
+                Shape::RootObject => unreachable!("handled above"),
             })
             .collect(),
     )
@@ -120,4 +134,40 @@ fn children_row(row: usize, sparsity: u8) -> Value {
         })
         .collect();
     json!({"id": row, "events": children})
+}
+
+fn root_object(rows: usize, sparsity: u8) -> Value {
+    let items: Vec<Value> = (0..rows).map(|row| delivery_item(row, sparsity)).collect();
+    Value::Object(Map::from_iter([
+        (String::from("items"), Value::Array(items)),
+        (
+            String::from("scope_counts"),
+            json!({"active": rows.min(7), "completed": rows.saturating_sub(7)}),
+        ),
+    ]))
+}
+
+fn delivery_item(row: usize, sparsity: u8) -> Value {
+    let mut object = Map::from_iter([
+        (String::from("id"), json!(format!("delivery-{row}"))),
+        (String::from("status"), json!("running")),
+    ]);
+    let mut usage = Map::new();
+    if present(row, 0, sparsity) {
+        usage.insert(String::from("tokens"), json!(row * 100));
+    }
+    if present(row, 1, sparsity) {
+        usage.insert(String::from("cost"), json!(format!("{row}.00")));
+    }
+    let agents: Vec<Value> = (0..2)
+        .filter(|agent| present(row, agent + 2, sparsity))
+        .map(|agent| json!({"id": format!("agent-{agent}"), "tokens": row * 10 + agent}))
+        .collect();
+    if !agents.is_empty() {
+        usage.insert(String::from("by_agent"), Value::Array(agents));
+    }
+    if !usage.is_empty() {
+        object.insert(String::from("usage"), Value::Object(usage));
+    }
+    Value::Object(object)
 }
