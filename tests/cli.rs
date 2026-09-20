@@ -69,6 +69,29 @@ fn stats_for_a_checked_in_file_stay_on_stderr() {
 }
 
 #[test]
+fn queries_a_checked_in_jsonl_sample_file_with_extension_inference() {
+    let file = fixture("events.jsonl");
+    let output = Command::cargo_bin("toon-world")
+        .unwrap()
+        .args([
+            file.to_str().unwrap(),
+            "-q",
+            ".[] | select(.level == \"warn\") | .message",
+            "--to",
+            "text",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "retrying gateway request\n"
+    );
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
 fn converts_json_file_to_toon_by_default() {
     let file = input_file(r#"{"name":"Ada","active":true}"#);
     let output = Command::cargo_bin("toon-world")

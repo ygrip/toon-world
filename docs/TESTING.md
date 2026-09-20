@@ -27,6 +27,7 @@ Milestone 0.4 inherits the structured/query coverage from earlier milestones, in
 - file/stdin/CLI error behavior;
 - JSON, NDJSON, CSV, YAML, TOML, XML adapters;
 - TOON decode and semantic round-trips.
+- checked-in `.jsonl` file inference and query routing through the CLI.
 
 ## Markdown coverage introduced in 0.4
 
