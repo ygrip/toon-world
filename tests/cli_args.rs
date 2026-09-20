@@ -1,14 +1,15 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use toon_world::cli::{Args, OutputFormat};
+use toon_world::cli::{Args, InputFormat, OutputFormat};
 
 #[test]
-fn defaults_to_identity_query_and_toon_output() {
+fn defaults_to_json_autodetection_identity_query_and_toon_output() {
     let args = Args::try_parse_from(["toon-world"]).unwrap();
 
     assert_eq!(args.file, None);
     assert_eq!(args.data, None);
+    assert_eq!(args.from, None);
     assert!(!args.quiet);
     assert!(!args.warnings_as_errors);
     assert_eq!(args.query, ".");
@@ -16,46 +17,58 @@ fn defaults_to_identity_query_and_toon_output() {
 }
 
 #[test]
-fn parses_file_query_and_output_format() {
+fn parses_explicit_input_and_output_formats() {
     let args = Args::try_parse_from([
         "toon-world",
-        "data.json",
+        "payload.txt",
+        "--from",
+        "csv",
         "-q",
-        ".users",
+        ".[0]",
         "--to",
         "json",
     ])
     .unwrap();
 
-    assert_eq!(args.file, Some(PathBuf::from("data.json")));
+    assert_eq!(args.file, Some(PathBuf::from("payload.txt")));
     assert_eq!(args.data, None);
-    assert_eq!(args.query, ".users");
+    assert_eq!(args.from, Some(InputFormat::Csv));
+    assert_eq!(args.query, ".[0]");
     assert_eq!(args.to, OutputFormat::Json);
 }
 
 #[test]
-fn parses_raw_data_and_warning_flags() {
+fn parses_raw_data_with_explicit_format() {
     let args = Args::try_parse_from([
         "toon-world",
         "--data",
-        r#"{"name":"Ada"}"#,
+        "id,name\n1,Ada\n",
+        "--from",
+        "csv",
         "--quiet",
-        "--to",
-        "json",
     ])
     .unwrap();
 
     assert_eq!(args.file, None);
-    assert_eq!(args.data.as_deref(), Some(r#"{"name":"Ada"}"#));
+    assert_eq!(args.data.as_deref(), Some("id,name\n1,Ada\n"));
+    assert_eq!(args.from, Some(InputFormat::Csv));
     assert!(args.quiet);
-    assert!(!args.warnings_as_errors);
 }
 
 #[test]
 fn dash_is_preserved_as_explicit_stdin_path() {
-    let args = Args::try_parse_from(["toon-world", "-", "--to", "text"]).unwrap();
+    let args = Args::try_parse_from([
+        "toon-world",
+        "-",
+        "--from",
+        "yaml",
+        "--to",
+        "text",
+    ])
+    .unwrap();
 
     assert_eq!(args.file, Some(PathBuf::from("-")));
+    assert_eq!(args.from, Some(InputFormat::Yaml));
     assert_eq!(args.to, OutputFormat::Text);
 }
 
@@ -78,6 +91,14 @@ fn rejects_quiet_and_warnings_as_errors_together() {
         .expect_err("warning policies must be mutually exclusive");
 
     assert!(error.to_string().contains("cannot be used with"));
+}
+
+#[test]
+fn rejects_unknown_input_format() {
+    let error = Args::try_parse_from(["toon-world", "--from", "ini"])
+        .expect_err("unsupported input format must be rejected");
+
+    assert!(error.to_string().contains("invalid value"));
 }
 
 #[test]
