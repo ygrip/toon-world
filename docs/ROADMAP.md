@@ -23,7 +23,7 @@ Implemented: `.toon` detection, `--from toon`, decode into the common model, sem
 
 ## 0.4 — Markdown
 
-Status: implemented on this branch, local verification required.
+Implemented and validated locally.
 
 Normalized model:
 
@@ -45,11 +45,11 @@ Helpers are jaq definitions, not a second query language.
 
 ## 0.5 — HTML
 
-Add default structural DOM normalization and explicit `--semantic` content extraction. Semantic mode should expose title, metadata, sections, code, lists, tables, links, images, and forms while excluding script/style payloads.
+Implemented and validated locally. Default mode emits structural DOM normalization. `--semantic` emits title, metadata, sections, code, lists, tables, links, images, and forms while excluding script/style payloads.
 
 ## 0.6 — measurement
 
-Add `--stats` for raw input bytes, rendered output bytes, absolute delta, and percentage reduction/increase. Tokenizer-specific estimates remain optional future work.
+Implemented and validated locally. `--stats` writes `input_bytes`, `output_bytes`, and `reduction_percent` as JSON to stderr; normal stdout remains unchanged. Tokenizer-specific estimates and absolute-delta fields remain future work.
 
 Do not add `--keep`, `--drop`, or `--drop-null`: jq already expresses those transformations and duplicating them would create competing interfaces for the same operation.
 

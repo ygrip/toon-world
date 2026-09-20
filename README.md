@@ -47,6 +47,20 @@ Build and install from a checkout:
 
 Both installers use an existing Rust toolchain or install it with official rustup, build a release binary, and copy it to the user-local bin directory. They print PATH guidance instead of modifying shell profiles.
 
+## HTML and statistics
+
+HTML defaults to a structural DOM-shaped model that retains tags, attributes, ordered children, scripts, and styles. Use `--semantic` for compact agent-oriented content that retains title, metadata, sections, code, lists, tables, links, images, and forms while omitting script/style payloads.
+
+```bash
+toon-world page.html --semantic -q 'section("Usage") | code("bash") | .text' --to text
+```
+
+Use `--stats` to write one JSON object to stderr without changing stdout. It contains `input_bytes`, `output_bytes`, and `reduction_percent`; `reduction_percent` is `null` for empty input.
+
+```bash
+toon-world users.json -q '.users[] | .name' --to text --stats
+```
+
 ## Markdown model
 
 Markdown is normalized for retrieval rather than byte-identical reconstruction:
@@ -124,7 +138,7 @@ A missing `section()` produces an empty jq result stream, following normal query
 | CSV | header row becomes object keys; every cell remains a string |
 | YAML | native scalar/container types; multiple documents become an ordered array |
 | TOML | tables/arrays/scalars mapped into the common value model |
-| XML | structural representation preserving tags (`t`), attributes (`a`), and ordered children (`c`) |
+| XML | structural representation preserving tags (`t`), attributes (`a`), and ordered children (`c`); root fragments become an ordered array |
 | TOON | decoded JSON-compatible value |
 | Markdown | title/frontmatter, ordered sections, typed blocks, link index |
 

@@ -21,7 +21,7 @@ A branch is not considered locally verified until all four commands succeed.
 
 ## Inherited coverage
 
-Milestone 0.4 inherits the structured/query coverage from earlier milestones, including:
+Later milestones inherit the structured/query coverage from earlier milestones, including:
 
 - jq query and output boundaries;
 - file/stdin/CLI error behavior;

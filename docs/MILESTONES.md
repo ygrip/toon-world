@@ -52,6 +52,14 @@ links
 
 Tests cover preambles, missing/duplicate headings, code with and without language, task lists, tables, blockquotes, rules, raw HTML, link metadata, extension/override routing, and invalid UTF-8. See [`TESTING.md`](TESTING.md).
 
+## 0.5 HTML contract
+
+Default HTML mode preserves a logical DOM model. `--semantic` emits retrieval-oriented title, metadata, sections, blocks, links, images, and forms, intentionally excluding scripts and styles. HTML semantic queries reuse `section()`, `code()`, and `links`.
+
+## 0.6 stats contract
+
+`--stats` writes one JSON line to stderr after rendering. It reports input byte length, rendered output byte length before the CLI's trailing newline, and reduction percentage; stdout is unchanged.
+
 ## Stacked review rule
 
 Each branch is an ancestor of the next: `main` → query core → structured adapters → TOON input → Markdown → HTML → context stats. Review each PR against its immediate parent.
