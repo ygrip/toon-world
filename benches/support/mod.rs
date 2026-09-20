@@ -14,9 +14,9 @@ pub enum Shape {
 impl Shape {
     pub const fn name(self) -> &'static str {
         match self {
-            Self::Shallow => "shallow",
-            Self::Deep => "deep",
-            Self::Children => "children",
+            Self::Shallow => "flat",
+            Self::Deep => "nested",
+            Self::Children => "child-tables",
         }
     }
 }
@@ -32,7 +32,7 @@ pub fn fixtures() -> Vec<Fixture> {
         for sparsity in SPARSITY_PERCENTS {
             for shape in SHAPES {
                 fixtures.push(Fixture {
-                    name: format!("{}-{rows}-{sparsity}", shape.name()),
+                    name: format!("{}-r{rows}-missing{sparsity}pct", shape.name()),
                     value: generate(rows, sparsity, shape),
                 });
             }
