@@ -1,6 +1,6 @@
 [package]
 name = "toon-world"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 description = "Fast multi-format query and transformation CLI with TOON output"
 license = "MIT"
@@ -15,6 +15,7 @@ jaq-fmts = { version = "0.1.1", default-features = false, features = ["toml", "x
 jaq-json = { version = "2.0.3", features = ["serde"] }
 jaq-std = "3.0.3"
 pulldown-cmark = { version = "0.13.4", default-features = false }
+scraper = { version = "0.27.0", default-features = false }
 serde_json = { version = "1", features = ["arbitrary_precision", "preserve_order"] }
 toon-format = { version = "0.5.0", default-features = false }
 

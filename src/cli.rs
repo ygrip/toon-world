@@ -12,6 +12,7 @@ pub enum InputFormat {
     Xml,
     Toon,
     Markdown,
+    Html,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -47,6 +48,10 @@ pub struct Args {
     /// Treat any warning as an error and exit non-zero.
     #[arg(long, conflicts_with = "quiet")]
     pub warnings_as_errors: bool,
+
+    /// Emit a compact content-oriented document model where supported (currently HTML).
+    #[arg(long)]
+    pub semantic: bool,
 
     /// jq-compatible query. Defaults to the identity filter.
     #[arg(short = 'q', long, default_value = ".")]

@@ -9,7 +9,7 @@ use jaq_json::Val;
 
 use crate::cli::InputFormat;
 use crate::diagnostics::Warning;
-use crate::markdown;
+use crate::{html, markdown};
 
 pub struct ReadResult {
     pub value: Val,
@@ -20,13 +20,14 @@ pub fn read(
     path: Option<&Path>,
     explicit_format: Option<InputFormat>,
     data: Option<&str>,
+    semantic: bool,
 ) -> Result<ReadResult> {
     let (format, warnings) = resolve_format(path, explicit_format);
     let value = if let Some(data) = data {
-        parse_bytes(data.as_bytes(), format)?
+        parse_bytes_with_options(data.as_bytes(), format, semantic)?
     } else {
         let bytes = read_bytes(path)?;
-        parse_bytes(&bytes, format)?
+        parse_bytes_with_options(&bytes, format, semantic)?
     };
     Ok(ReadResult { value, warnings })
 }
@@ -66,11 +67,16 @@ pub fn detect_format(path: &Path) -> Option<InputFormat> {
         "xml" | "xhtml" => Some(InputFormat::Xml),
         "toon" => Some(InputFormat::Toon),
         "md" | "markdown" => Some(InputFormat::Markdown),
+        "html" | "htm" => Some(InputFormat::Html),
         _ => None,
     }
 }
 
 pub fn parse_bytes(bytes: &[u8], format: InputFormat) -> Result<Val> {
+    parse_bytes_with_options(bytes, format, false)
+}
+
+pub fn parse_bytes_with_options(bytes: &[u8], format: InputFormat, semantic: bool) -> Result<Val> {
     match format {
         InputFormat::Json => jaq_json::read::parse_single(bytes)
             .map_err(|error| anyhow!("error[parse:json]: {error:?}")),
@@ -82,6 +88,7 @@ pub fn parse_bytes(bytes: &[u8], format: InputFormat) -> Result<Val> {
         InputFormat::Xml => parse_xml(as_utf8(bytes, "xml")?),
         InputFormat::Toon => parse_toon(as_utf8(bytes, "toon")?),
         InputFormat::Markdown => markdown::parse(as_utf8(bytes, "markdown")?),
+        InputFormat::Html => html::parse(as_utf8(bytes, "html")?, semantic),
     }
 }
 
