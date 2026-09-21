@@ -1,115 +1,55 @@
 # toon-world roadmap
 
-This roadmap is intentionally staged. The project should prove that it is useful before growing a private dialect of TOON.
+`toon-world` is a universal query/transform bridge whose default structured output is TOON. The goal is one fast executable that can parse different formats, query only the needed data, and emit compact context.
 
-## Phase 0 — baseline and measurement
+## 0.1 — query core
 
-Goal: establish a trustworthy comparison point.
+Status: implemented on this branch, local verification required.
 
-- Pin the supported TOON specification version.
-- Define the canonical value model used internally.
-- Build a benchmark corpus containing:
-  - uniform JSON arrays;
-  - heterogeneous JSON arrays;
-  - nested objects;
-  - CSV tables;
-  - XML with attributes/repeated nodes/mixed content;
-  - representative HTML pages;
-  - NDJSON streams.
-- Measure:
-  - input bytes;
-  - output bytes;
-  - conversion throughput;
-  - peak memory;
-  - optional tokenizer-specific token counts.
+- Rust single binary
+- JSON file/stdin input
+- embedded jaq query engine
+- identity query by default
+- TOON / compact JSON / scalar text output
+- deterministic error categories
+- high-value query/output/CLI tests
 
-Exit condition: every later optimization can be compared against reproducible fixtures instead of vibes.
+## 0.2 — structured adapters
 
-## Phase 1 — standard TOON transformer
+Planned as a separate stacked PR:
 
-Goal: ship a small, predictable single binary.
+- NDJSON / JSONL
+- CSV
+- YAML
+- TOML
+- structural XML
 
-Recommended implementation: **Rust**, primarily for a small standalone binary, explicit memory control, mature streaming parsers, and predictable performance. This remains an implementation choice rather than part of the file format.
+The adapter boundary must remain independent from the query engine.
 
-Initial inputs:
+## 0.3 — TOON input
 
-1. JSON
-2. NDJSON
-3. CSV
-4. YAML
-5. TOML
+Add TOON decoding as first-class input, with the compatibility claim pinned to the TOON version actually supported by the selected Rust implementation.
 
-Initial output:
+## 0.4 — Markdown
 
-- standard TOON only.
+Normalize Markdown into a retrieval-oriented document model with ordered sections, typed blocks, frontmatter, links, and jaq helpers such as `section()` and `code()`.
 
-CLI baseline:
+## 0.5 — HTML
 
-```bash
-toon-world FILE
-toon-world --from json --to toon FILE
-cat FILE | toon-world
-toon-world FILE --stats
-```
+Support two explicit contracts:
 
-Requirements:
+- structural DOM model by default;
+- content-oriented `--semantic` mode for agents.
 
-- stdin/stdout first-class;
-- format auto-detection when reliable;
-- explicit `--from` override;
-- deterministic output;
-- useful parse errors with input location;
-- semantic round-trip tests through the canonical value model;
-- no automatic lossy transforms.
+## 0.6 — measurement
 
-## Phase 2 — XML and HTML adapters
+Add `--stats` for raw input bytes, rendered output bytes, absolute delta, and percentage reduction/increase. Tokenizer-specific estimates can remain optional future work if they would burden the default binary.
 
-Goal: handle document-shaped formats without pretending they are JSON with angle brackets.
+Do not add `--keep`, `--drop`, or `--drop-null` as parallel interfaces for operations jq already expresses.
 
-### XML
+## Experimental — sparse heterogeneous tables
 
-Add a structural mapping that distinguishes:
-
-- element names;
-- attributes;
-- text nodes;
-- repeated child elements;
-- mixed content;
-- namespaces where present.
-
-Add a separate `--semantic` mode only after structural behavior is stable.
-
-### HTML
-
-Add document-aware conversion with two explicit behaviors:
-
-- structural mode for DOM-like preservation;
-- semantic mode for LLM context extraction.
-
-Semantic HTML may retain headings, paragraphs, links, lists, tables, forms, metadata, and useful image text while discarding scripts, styles, tracking attributes, and layout-only wrappers.
-
-## Phase 3 — context-oriented controls
-
-Goal: make the tool useful in agent pipelines without weakening default guarantees.
-
-Potential explicit options:
-
-```bash
---keep <selector>
---drop <selector>
---drop-null
---semantic
---stats
---tokenizer <name>
-```
-
-These operations are opt-in because some are intentionally lossy.
-
-## Phase 4 — sparse heterogeneous table experiment
-
-Goal: test whether non-uniform object arrays can be encoded more efficiently than standard TOON list form while remaining reversible.
-
-Example candidate:
+Research a reversible extension for overlapping object shapes:
 
 ```text
 [3]{type,repo,pr,key}:
@@ -118,41 +58,24 @@ Example candidate:
   github,mom,12,~
 ```
 
-Proposed semantics:
+Candidate semantics:
 
-- `~` means the property was absent;
-- `null` remains JSON null;
-- `""` remains an empty string;
-- original array order is preserved;
-- no regrouping or hoisting occurs.
+- `~` = property absent;
+- `null` = JSON null;
+- `""` = empty string;
+- row order preserved.
 
-This must remain an explicit toon-world extension unless accepted by the TOON specification.
-
-Before implementing it as a stable feature, compare candidate encodings by:
-
-- bytes;
-- tokenizer-specific tokens;
-- encode/decode speed;
-- model comprehension/retrieval accuracy;
-- density of present cells.
-
-The encoder should never assume sparse tabular is smaller. Standard list form remains the baseline.
-
-## Phase 5 — optimization policy
-
-Only after real benchmark data exists, consider an `--auto` context mode that chooses among safe representations or transformations.
-
-Do **not** add numeric key aliases, constant hoisting, row regrouping, or source-shape-changing compression unless a concrete benchmark demonstrates enough gain to justify new decoding metadata and complexity.
+Only stabilize this if representative benchmarks prove material context savings and reliable decoding/comprehension.
 
 ## Release shape
 
-A sensible release sequence is:
+- `0.1`: JSON query core
+- `0.2`: structured adapters
+- `0.3`: TOON input
+- `0.4`: Markdown
+- `0.5`: HTML
+- `0.6`: byte-size stats
+- `0.x-experimental`: sparse tables
+- `1.0`: stable CLI + documented contracts + reproducible benchmarks
 
-- `0.1`: JSON / NDJSON / CSV → standard TOON + stats
-- `0.2`: YAML / TOML + stronger streaming and benchmarks
-- `0.3`: XML structural adapter
-- `0.4`: HTML structural + semantic adapter
-- `0.x-experimental`: sparse heterogeneous tables behind an explicit flag
-- `1.0`: stable CLI, documented conversion contracts, reproducible benchmarks
-
-The version numbers are milestones, not promises. Features should move only when their contracts are stable and measured.
+See [`MILESTONES.md`](MILESTONES.md) for the stacked PR chain and [`TESTING.md`](TESTING.md) for verification/coverage policy.

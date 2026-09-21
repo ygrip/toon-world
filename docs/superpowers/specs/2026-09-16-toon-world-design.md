@@ -1,27 +1,25 @@
 # toon-world initial design
 
 Date: 2026-09-16
-Status: initial design
+Status: approved for initial implementation
 
 ## 1. Problem
 
-TOON is compact when the source already fits the JSON data model well, especially uniform arrays of objects. Real context sources arrive as JSON, NDJSON, CSV, YAML, TOML, XML, and HTML, and they vary widely in shape.
+The value of TOON is not merely converting punctuation from one serialization into another. Agent and shell workflows usually need only a slice of a large input. `toon-world` therefore exists to read multiple structured/document formats through one interface, query or transform the normalized data, and emit a compact result.
 
-`toon-world` should provide one small executable that accepts these inputs and produces compact TOON without silently changing the source meaning.
-
-The project is not primarily a new serialization format. It is a format adapter and context-normalization tool whose default target is standard TOON.
+The product is a **universal query and transformation CLI with TOON as the default structured output**, not a new serialization format and not a replacement query language.
 
 ## 2. Product contract
 
-### Default contract
-
-For formats that map directly into a JSON-compatible value tree:
+### Default flow
 
 ```text
-decode_toon(encode_toon(normalize(source))) == normalize(source)
+source -> parser/adapter -> normalized value -> jq-compatible query -> output encoder
 ```
 
-The equality is structural/semantic, not byte-identical. Whitespace, quoting style, comments, and source-specific formatting do not have to round-trip unless explicitly supported.
+The identity query is used when the caller supplies no query.
+
+For JSON-compatible inputs, conversion without an explicit lossy option must preserve the logical value tree. Equality is structural/semantic, not byte-identical.
 
 Default conversion must preserve:
 
@@ -32,238 +30,135 @@ Default conversion must preserve:
 - nested structure;
 - property absence.
 
-Default conversion must not:
+Default conversion must not silently:
 
 - drop fields;
-- reorder heterogeneous records for compression;
+- reorder heterogeneous records;
 - hoist repeated values into a new parent structure;
 - create key aliases;
 - emit a toon-world extension while claiming standard TOON.
 
-### Lossy / semantic contract
+A query may intentionally return only part of the source. That is not considered an implicit lossy conversion because the selection is explicitly requested by the caller.
 
-Operations that intentionally discard source detail must be explicit, for example:
+## 3. CLI contract
+
+The initial CLI keeps conversion trivial and avoids ambiguous positional query/file parsing:
 
 ```bash
---semantic
---drop <selector>
---keep <selector>
---drop-null
+toon-world [FILE]
+toon-world [FILE] -q '<jq filter>'
+cat input.json | toon-world -q '<jq filter>'
+toon-world [FILE] -q '<jq filter>' --to toon|json|text
 ```
 
-A semantic conversion is optimized for useful LLM context, not reconstruction of the original source.
+Rules:
 
-## 3. Standards boundary
-
-The current TOON specification is the authority for standard output. The initial implementation should pin the supported spec version in code and documentation rather than silently changing behavior when the upstream draft changes.
-
-As of this design, TOON 4.1 requires arrays to share the same key set and compatible column shapes before tabular form is used. Heterogeneous object arrays therefore use list form.
-
-`toon-world` may research extensions, but an extension needs:
-
-1. an explicit mode or target;
-2. versioned semantics;
-3. reversible decoding;
-4. benchmark evidence;
-5. clear separation from standard `.toon` output.
+- omitted `FILE` reads stdin;
+- omitted `-q` means identity filter `.`;
+- default structured output is `toon`;
+- `--to json` emits compact JSON initially;
+- `--to text` requires scalar/string-like output and prints its raw value;
+- multiple jq results are emitted as a result stream; the initial implementation may encode each result independently rather than implicitly collecting them.
 
 ## 4. Architecture
 
 ```text
-                  ┌──────────────┐
-file / stdin ────>│ input detect │
-                  └──────┬───────┘
-                         │
-                  ┌──────▼───────┐
-                  │ format parser │
-                  └──────┬───────┘
-                         │ events / values
-                  ┌──────▼────────┐
-                  │ canonical IR   │
-                  └──────┬────────┘
-                         │
-                  ┌──────▼────────┐
-                  │ transform mode │
-                  │ lossless /     │
-                  │ semantic       │
-                  └──────┬────────┘
-                         │
-                  ┌──────▼────────┐
-                  │ TOON encoder   │
-                  └──────┬────────┘
-                         │
-                  stdout / file
+JSON ───┐
+YAML ───┤
+TOML ───┤
+CSV ────┤
+NDJSON ─┤
+XML ────┤
+HTML ───┤──> adapters -> normalized values -> jaq -> output encoder
+MD ─────┤
+TOON ───┘
 ```
 
-### 4.1 Input detector
+### 4.1 Query engine
 
-Responsibilities:
+Embed `jaq` rather than implementing a new jq dialect. `jaq-core` provides parsing/compilation/execution and the jaq ecosystem already supports several structured formats. toon-world owns the stable CLI and format contracts around it.
 
-- honor explicit `--from` first;
-- use extension when trustworthy;
-- sniff stdin only when detection is unambiguous;
-- fail with a useful message rather than guessing aggressively.
+The query engine must be isolated behind a small interface so jaq API changes do not leak through the rest of the codebase.
 
-### 4.2 Format adapters
+Conceptual interface:
 
-Each adapter has one job: parse its source into canonical events/values while retaining source distinctions required by that adapter's contract.
-
-Initial adapters:
-
-- JSON
-- NDJSON
-- CSV
-- YAML
-- TOML
-
-Later adapters:
-
-- XML
-- HTML
-
-### 4.3 Canonical representation
-
-For JSON-like formats, use a small value model equivalent to:
-
-```text
-Null
-Bool
-Number
-String
-Array<Value>
-Object<ordered key, Value>
+```rust
+pub fn execute(query: &str, input: Value) -> Result<Vec<Value>, QueryError>;
 ```
 
-Object encounter order should be retained because TOON field order is observable in output even though JSON object semantics are not inherently ordered.
+The concrete internal value may initially use `jaq_json::Val`; boundaries should prevent it from infecting adapters and encoders unnecessarily.
 
-XML/HTML need an adapter-specific representation before deciding whether they collapse into the JSON-compatible value model. Mixed content cannot be represented faithfully by pretending every element is a plain object.
+### 4.2 Input adapters
 
-### 4.4 Encoder
+Each adapter converts source syntax into normalized queryable values. Explicit `--from` wins; extension-based detection follows; stdin sniffing is conservative.
 
-The standard encoder should follow TOON detection rules rather than invent heuristics:
+Initial implementation: JSON only.
 
-- primitive arrays -> inline form;
-- uniform object arrays -> tabular form;
-- compatible uniform nested objects -> nested field groups;
-- non-uniform arrays -> list form;
-- keyed uniform objects -> keyed tabular form where supported.
+Next structured adapters should prefer jaq's existing format support where the mapping contract matches toon-world requirements: NDJSON, CSV, YAML, TOML, XML.
 
-## 5. Streaming strategy
+Markdown and HTML remain toon-world-specific document adapters.
 
-Streaming is a product goal, not a requirement that every format be processed with O(1) memory from the first release.
+### 4.3 Output encoders
 
-Use three levels:
+Initial outputs:
 
-### Level A — naturally streaming
+- `toon` — default for structured values;
+- `json` — compact JSON;
+- `text` — scalar/raw shell output.
 
-- NDJSON
-- CSV
+TOON encoding is an adapter boundary of its own. The project must explicitly document which upstream TOON spec/version the selected Rust encoder supports. The current TOON specification is 4.1 while the published official Rust crate may lag; toon-world must not claim unsupported conformance.
 
-Process rows incrementally where TOON output can be determined without buffering the full document.
+## 5. Markdown model
 
-### Level B — bounded lookahead
+Markdown should be parsed to an AST and normalized into a stable document model, not treated as plain text with regular expressions.
 
-For cases where field shape must be known before a table header is emitted, buffer the minimum necessary region or spool rows when worthwhile.
+The model should make these concepts queryable:
 
-### Level C — tree-backed
-
-Nested JSON/YAML/TOML may initially use a full value tree for correctness. Replace hot paths with event-based encoding only after benchmarks show that memory is a real problem.
-
-This avoids making the first release dramatically more complex merely so a README can contain the word "streaming" several additional times.
-
-## 6. Input mappings
-
-### 6.1 JSON
-
-Direct mapping to the canonical value model.
-
-### 6.2 NDJSON
-
-Treat each line as one JSON value. A homogeneous object stream may be emitted as a TOON table when its shape is known and buffering policy permits it; otherwise use a standard list-compatible representation.
-
-### 6.3 CSV
-
-CSV headers become field names and records become rows.
-
-Important distinctions:
-
-- quoted delimiters must remain part of the value;
-- empty cell is an empty string unless configured otherwise;
-- type inference must be conservative and documented;
-- an option may disable inference and preserve all cells as strings.
-
-### 6.4 YAML
-
-Normalize YAML values that fit the supported canonical model. YAML-specific features such as anchors, aliases, custom tags, duplicate keys, or non-string mapping keys need explicit rejection or documented normalization rules rather than silent corruption.
-
-### 6.5 TOML
-
-Map tables, arrays, strings, booleans, and numbers into the canonical model. Date/time values require an explicit representation rule because JSON/TOON do not have an intrinsic datetime primitive.
-
-### 6.6 XML
-
-Structural XML must distinguish at minimum:
-
-- elements;
-- attributes;
-- text nodes;
-- child ordering;
-- repeated elements;
-- mixed content;
-- namespaces where retained.
-
-Example mixed content:
-
-```xml
-<p>Hello <strong>world</strong>!</p>
-```
-
-cannot safely become `p: Hello world!` in structural mode because element boundaries and text ordering disappear.
-
-Semantic XML may intentionally simplify this structure behind `--semantic`.
-
-### 6.7 HTML
-
-HTML should not be implemented as a trivial XML alias.
-
-Structural mode retains meaningful DOM structure.
-
-Semantic mode may retain:
-
-- title and document metadata useful to an LLM;
-- headings;
-- paragraphs and text;
-- links and destinations;
+- title;
+- frontmatter;
+- headings and levels;
+- sections;
+- paragraphs;
 - lists;
+- links;
+- code blocks and language;
 - tables;
-- forms and labels;
-- image alt text.
+- blockquotes.
 
-It may discard:
+Planned sugar such as:
 
-- scripts;
-- styles;
-- tracking attributes;
-- purely presentational wrappers;
-- framework hydration payloads unless explicitly requested.
-
-## 7. Sparse heterogeneous table research
-
-### Problem
-
-Standard TOON cannot tabularize:
-
-```json
-[
-  {"type":"github","repo":"punakawan","pr":34},
-  {"type":"jira","key":"ABC-1"},
-  {"type":"github","repo":"mom","pr":12}
-]
+```jq
+section("Installation")
+code("rust")
 ```
 
-because rows do not share the same field set.
+must compile to or register as functions in the same query engine. They are not a second DSL.
 
-### Candidate extension
+## 6. HTML model
+
+HTML is document-shaped and must not be a trivial XML alias. Structural mode preserves meaningful DOM ordering and attributes needed by the contract. Semantic mode may intentionally retain headings, text, links, lists, tables, forms, metadata, and alt text while removing scripts, styles, tracking attributes, hydration data, and layout-only wrappers.
+
+Planned helper:
+
+```jq
+links()
+```
+
+## 7. Streaming
+
+Streaming remains a product goal, but query execution often requires materialized values depending on the filter. Do not advertise O(1) memory for arbitrary jq programs.
+
+Use streaming where it naturally survives the query boundary:
+
+- NDJSON/CSV records when the query can be evaluated per record;
+- direct conversion paths with identity/simple projections;
+- output result streaming.
+
+Correctness comes before heroic streaming machinery.
+
+## 8. Sparse heterogeneous tables
+
+Standard TOON uses list form for heterogeneous object arrays. A possible toon-world extension may use the stable union of fields plus an explicit absent sentinel:
 
 ```text
 [3]{type,repo,pr,key}:
@@ -277,145 +172,67 @@ Candidate semantics:
 - `~` = property absent;
 - `null` = JSON null;
 - `""` = empty string;
-- row order remains unchanged;
-- header is the stable union of encountered fields.
+- row order preserved.
 
-### Why this is only an experiment
+This remains experimental and opt-in until byte/token savings, encode/decode cost, and model comprehension are benchmarked. Numeric alias dictionaries, regrouping, and constant hoisting are out of scope until evidence says otherwise.
 
-A sparse table can be worse than standard list form when row density is low. It also introduces syntax not defined by standard TOON.
+## 9. Performance and implementation
 
-The experiment succeeds only if it demonstrates meaningful improvement on representative data without degrading model comprehension.
+Implementation language: Rust.
 
-Compare candidate output with standard TOON using:
+Goals:
 
-```text
-encoded bytes
-encoded tokens per tokenizer
-encode throughput
-decode throughput
-peak memory
-model extraction / retrieval accuracy
-```
-
-Do not use a fixed density threshold until measurements justify one. The simplest candidate policy is to encode both representations for a bounded sample and choose the cheaper representation only in explicit extension mode.
-
-## 8. CLI design
-
-Baseline:
-
-```bash
-toon-world [FILE]
-toon-world [FILE] --from <format>
-toon-world [FILE] --to toon
-toon-world [FILE] --stats
-cat input.json | toon-world
-```
-
-Later explicit transformations:
-
-```bash
-toon-world page.html --semantic
-toon-world input.json --keep id,name,status
-toon-world input.json --drop metadata.debug
-toon-world input.json --drop-null
-```
-
-Possible experimental surface:
-
-```bash
-toon-world input.json --experimental-sparse-table
-```
-
-Avoid a large flag taxonomy until actual use cases require it.
-
-## 9. Performance goals
-
-The project should optimize for:
-
+- one self-contained executable;
 - fast startup;
-- single self-contained binary;
-- low idle/runtime overhead;
-- linear-time parsing/encoding for ordinary inputs;
-- bounded copying;
-- stdout-friendly operation in shell and agent pipelines.
+- low allocation/copying overhead;
+- deterministic output;
+- stdin/stdout friendliness;
+- release binaries for Linux/macOS/Windows;
+- safe Rust for ordinary paths.
 
-Recommended implementation language: Rust.
+Use mature libraries instead of rebuilding foundations. In particular, embed jaq for jq semantics.
 
-Reasons:
+## 10. Error contract
 
-- strong standalone binary story;
-- explicit ownership and allocation control;
-- mature parsers for the target formats;
-- good streaming I/O primitives;
-- straightforward cross-platform release artifacts.
-
-The design should not rely on unsafe code for ordinary parsing/encoding paths unless profiling later proves a concrete need.
-
-## 10. Error handling
-
-Errors should identify:
-
-- input format;
-- byte/line/column when available;
-- offending construct;
-- whether the failure is parse-time, normalization-time, or encode-time;
-- a corrective hint when one is obvious.
-
-Examples:
+Errors identify the stage:
 
 ```text
-error[xml]: mixed content cannot be represented by the selected mapping at line 18
-hint: use structural XML mode or --semantic
+error[input]: ...
+error[parse:json]: ...
+error[query]: ...
+error[encode:toon]: ...
 ```
 
-```text
-error[input]: could not reliably detect stdin format
-hint: pass --from json|yaml|csv|...
-```
+When locations are available, include line/column or query span. Invalid filters must fail before data execution when possible.
 
 ## 11. Verification
 
-Every format adapter needs fixture-based tests covering:
+Initial tests must cover:
 
-- primitives;
-- empty structures;
-- nested structures;
-- escaping;
-- null / empty / absent distinctions;
-- malformed input;
-- Unicode;
-- ordering behavior.
+- JSON identity conversion;
+- field selection;
+- array iteration and `select`;
+- object projection;
+- multiple jq results;
+- stdin and file input;
+- malformed JSON;
+- malformed jq filter;
+- structured TOON output;
+- compact JSON output;
+- scalar text output and rejection of non-scalar text output.
 
-Core invariants:
+Later adapters add fixture-based tests for escaping, Unicode, empty structures, format-specific edge cases, and normalized tree contracts.
 
-1. JSON-compatible lossless inputs structurally round-trip through TOON.
-2. Default output is valid standard TOON for the pinned spec.
-3. Semantic/lossy behavior only occurs behind explicit options.
-4. Benchmark fixtures are version-controlled and reproducible.
-5. Experimental sparse encoding has decode fixtures proving absent/null/empty distinctions.
+## 12. Initial implementation scope
 
-## 12. Scope for the first implementation cycle
+The first implementation cycle deliberately stops at a useful vertical slice:
 
-Keep the first cycle smaller than the whole roadmap:
+1. Rust CLI scaffold.
+2. JSON file/stdin input.
+3. Embedded jaq query execution.
+4. Identity query by default.
+5. TOON/JSON/text output.
+6. Integration/unit tests.
+7. Basic byte statistics may follow after the core path is stable.
 
-- Rust project scaffold;
-- JSON input;
-- standard TOON encoder/decoder integration or implementation strategy;
-- stdin/stdout;
-- `--from json` plus JSON auto-detection;
-- `--stats` for bytes;
-- fixture tests and a small benchmark harness.
-
-CSV and NDJSON should be the next adapters because they exercise the tabular and streaming paths without dragging XML's centuries of accumulated personality into the first milestone.
-
-## 13. Open decisions before implementation
-
-These should be resolved before code commits begin:
-
-1. Reuse an existing Rust TOON crate versus implement the pinned subset directly.
-2. Exact XML structural mapping contract.
-3. Exact HTML semantic retention policy.
-4. Tokenizer support strategy for `--stats`.
-5. Name and wire format, if any, for the sparse-table extension.
-
-None of these block the initial repository bootstrap or the JSON-first implementation plan.
+CSV/YAML/XML/Markdown/HTML are subsequent slices, not excuses to keep v0.1 hypothetical.

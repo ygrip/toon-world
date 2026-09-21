@@ -1,134 +1,192 @@
 # toon-world
 
-A fast, lightweight, single-binary transformer that turns structured data into compact, LLM-friendly [TOON](https://github.com/toon-format/spec).
+A fast, lightweight, single-binary query and transformation tool for structured and document data, with compact [TOON](https://github.com/toon-format/spec) output by default.
 
-> **Status:** design / bootstrap
+> **Milestone 0.1:** JSON query core. This branch intentionally contains only the execution spine; additional input adapters are separate stacked PRs.
 
 ## Why
 
-TOON is excellent when data already matches its strongest shape: uniform arrays of objects. Real inputs are messier. APIs return irregular JSON, CSV is already tabular, XML carries attributes and repeated elements, and HTML contains far more presentation syntax than useful context.
+Conversion alone is not the product. `toon-world` exists so data can be filtered before it enters an agent's context, using one jq-compatible query layer and a compact default output.
 
-`toon-world` aims to be the thin normalization layer between those formats and TOON without quietly changing the meaning of the source.
+Milestone 0.1 implements:
+
+```text
+JSON file / stdin / --data -> jaq value -> jq-compatible query -> TOON / JSON / text
+```
+
+The planned full architecture is:
 
 ```text
 JSON ───┐
 YAML ───┤
 TOML ───┤
 CSV ────┤
-NDJSON ─┤──> normalize ──> TOON
-XML ────┤
-HTML ───┘
+NDJSON ─┤
+XML ────┤──> adapter ──> normalized value ──> jq-compatible query ──> TOON / JSON / text
+HTML ───┤
+MD ─────┤
+TOON ───┘
 ```
+
+`toon-world` embeds [`jaq`](https://github.com/01mf02/jaq) rather than inventing another query language.
+
+## Implemented in 0.1
+
+- JSON file input
+- JSON stdin input, implicit or explicit `-`
+- raw JSON input via `--data`
+- `FILE` and `--data` are mutually exclusive
+- jq-compatible queries through embedded `jaq`
+- identity query when `-q` is omitted
+- TOON output by default
+- compact JSON output via `--to json`
+- scalar text output via `--to text`
+- multiple query results collected for structured output
+- explicit input / parse / query / encoding error categories
+- reusable warning diagnostics with `warning[category]: ...`
+- `--quiet` to suppress warnings
+- `--warnings-as-errors` to fail on warnings
+- warning output is stderr-only and never contaminates stdout data
+- preservation of object order and arbitrary-precision JSON numbers at the serialization boundary
+
+## Input modes
+
+Exactly one source is used:
+
+```bash
+# file
+toon-world data.json
+
+# stdin
+cat data.json | toon-world
+printf '%s' '{"name":"Ada"}' | toon-world
+
+# raw argument
+toon-world --data '{"name":"Ada","active":true}'
+```
+
+`FILE` and `--data` cannot be combined. Raw data is parsed directly from the argument; toon-world does not create a temporary file.
+
+## CLI
+
+Convert using the identity query:
+
+```bash
+toon-world data.json
+cat data.json | toon-world
+toon-world --data '{"name":"Ada"}'
+```
+
+Filter or project using jq syntax:
+
+```bash
+toon-world data.json -q '.users[] | select(.active == true)'
+toon-world data.json -q '.users[] | {id,name}'
+toon-world --data '{"users":[{"id":1,"active":true}]}' -q '.users[] | select(.active)'
+```
+
+Choose output:
+
+```bash
+toon-world data.json -q '.users' --to toon
+toon-world data.json -q '.users' --to json
+toon-world package.json -q '.version' --to text
+```
+
+Structured output collects multiple jq results into one array. `--to text` emits scalar results one per line and rejects arrays/objects so shell output is not ambiguously serialized.
+
+## Warnings and errors
+
+Diagnostics are intentionally separate from data output:
+
+```text
+stdout -> result data only
+stderr -> warnings and errors only
+```
+
+Errors use stable categories such as:
+
+```text
+error[input]: ...
+error[parse:json]: ...
+error[query]: ...
+error[encode:toon]: ...
+```
+
+Warnings use:
+
+```text
+warning[input]: ...
+warning[format]: ...
+```
+
+Use `--quiet` to suppress warnings or `--warnings-as-errors` to turn any warning into a non-zero failure. Those two flags are mutually exclusive.
+
+Milestone 0.1 provides the warning infrastructure. Later adapters introduce concrete warning sources such as unknown-extension fallback.
+
+## Query and output contracts
+
+- `.` is the default query.
+- Zero structured query results encode as `[]`.
+- Zero text query results emit no bytes.
+- A single structured result remains that value rather than being wrapped in an array.
+- Multiple structured results preserve query order inside one array.
+- JSON output is compact.
+- TOON output is decoded in tests to verify semantic round-trip rather than punctuation.
+- Text output accepts null, booleans, numbers, and strings; arrays/objects are rejected.
+
+## TOON compatibility
+
+The current Rust integration uses `toon-format` 0.5.x, whose published documentation declares TOON specification **v3.0** compatibility. This milestone does **not** claim compatibility with newer TOON spec revisions.
+
+The encoder is isolated behind `output` so a future TOON implementation upgrade does not disturb input/query architecture.
 
 ## Principles
 
-1. **Lossless by default**
-   - Preserve the logical value tree and source ordering where the target model supports it.
-   - A default conversion must not silently drop fields, regroup records, or hoist values.
+1. **Query first**: parse once, query the normalized value, encode only the result.
+2. **Lossless by default**: conversion must not silently drop, regroup, or hoist data.
+3. **Standard TOON first**: extensions are explicit, versioned, benchmarked, and opt-in.
+4. **One executable**: no runtime dependency on jq, Node, Python, or companion binaries.
+5. **stdin/stdout first**: shell and agent pipelines are primary use cases.
+6. **Measure, do not guess**: optimizations need reproducible byte/token/performance evidence.
 
-2. **Standard TOON first**
-   - Default output should conform to the current TOON specification.
-   - Any toon-world-only extension must be explicit, versioned, benchmarked, and opt-in.
+## Testing and local verification
 
-3. **Optimize structure before syntax tricks**
-   - Do not add alias dictionaries or custom metadata unless measured savings justify the complexity.
-   - Prefer the natural TOON representation for the existing data shape.
+CI is intentionally disabled during the initial milestone chain. The test suite focuses on behavior boundaries and silent-data-loss risks, including raw data/file conflicts, warning policy, query failures, empty streams, nested/escaped TOON values, large integers, CLI argument defaults, file/stdin routing, and null-vs-empty-string behavior.
 
-4. **Streaming where practical**
-   - stdin/stdout should be first-class.
-   - Large inputs should not require multiple full copies in memory.
+See [`docs/TESTING.md`](docs/TESTING.md) for the coverage matrix and test policy.
 
-5. **Measure, do not guess**
-   - Report bytes and, when a tokenizer is selected, estimated token counts.
-   - Experimental encodings should only win when they are actually smaller.
-
-## Initial CLI shape
+Run locally:
 
 ```bash
-# auto-detect input, emit standard TOON
-toon-world input.json
-
-toon-world input.yaml
-toon-world input.csv
-cat response.ndjson | toon-world
-
-# explicit formats
-toon-world input.xml --from xml --to toon
-
-# inspect savings
-toon-world input.json --stats
-
-# intentionally semantic / lossy transforms
-toon-world page.html --semantic
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
+cargo build --release
 ```
 
-The default path is boring on purpose: parse, normalize, encode. Cleverness belongs behind explicit flags until it has earned the privilege.
+Smoke checks:
 
-## Format direction
+```bash
+cargo run --quiet -- --data '{"users":[{"id":1,"name":"Ada","active":true},{"id":2,"name":"Bob","active":false}]}' \
+  -q '.users[] | select(.active) | {id,name}' --to json
+# {"id":1,"name":"Ada"}
 
-### JSON / YAML / TOML / NDJSON
-
-Normalize into the JSON-compatible value model, then encode as standard TOON.
-
-### CSV
-
-Map the header to a TOON tabular field list and rows to TOON rows. CSV is already close to TOON's ideal shape.
-
-### XML
-
-Provide two eventual modes:
-
-- **structural**: preserve elements, attributes, repeated nodes, and mixed content faithfully enough to reconstruct the logical XML tree.
-- **semantic**: intentionally collapse XML ceremony when exact reconstruction is not required.
-
-### HTML
-
-Treat HTML separately from generic XML:
-
-- default structural conversion preserves meaningful DOM structure;
-- `--semantic` extracts useful document content such as headings, text, links, lists, tables, and form metadata while dropping presentation noise.
-
-## Sparse heterogeneous tables
-
-A promising experiment is allowing heterogeneous object arrays to use a sparse tabular representation.
-
-Input:
-
-```json
-[
-  {"type":"github","repo":"punakawan","pr":34},
-  {"type":"jira","key":"ABC-1"},
-  {"type":"github","repo":"mom","pr":12}
-]
+printf '%s' '{"version":"0.1.0"}' \
+  | cargo run --quiet -- -q '.version' --to text
+# 0.1.0
 ```
 
-Standard TOON uses list form because the objects do not share one field set.
+## Project docs
 
-A toon-world extension could experimentally encode the union of fields and use an explicit **absent** sentinel distinct from JSON `null` and the empty string:
-
-```text
-[3]{type,repo,pr,key}:
-  github,punakawan,34,~
-  jira,~,~,ABC-1
-  github,mom,12,~
-```
-
-This is **not standard TOON today** and therefore must not be emitted by the default encoder. It is a research direction to benchmark against standard list form before any format commitment.
-
-## Non-goals for the first release
-
-- inventing a replacement for TOON;
-- numeric key aliases;
-- schema inference systems;
-- lossy field filtering by default;
-- preserving byte-identical source formatting;
-- turning every source format into one giant AST in memory.
-
-## Roadmap
-
-See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the phased plan and [`docs/superpowers/specs/2026-09-16-toon-world-design.md`](docs/superpowers/specs/2026-09-16-toon-world-design.md) for the initial design.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): planned milestone sequence
+- [`docs/MILESTONES.md`](docs/MILESTONES.md): stacked PR contract and status
+- [`docs/TESTING.md`](docs/TESTING.md): verification policy and coverage matrix
+- [`docs/superpowers/specs/2026-09-16-toon-world-design.md`](docs/superpowers/specs/2026-09-16-toon-world-design.md): architecture/design
+- [`docs/superpowers/plans/2026-09-16-query-core.md`](docs/superpowers/plans/2026-09-16-query-core.md): 0.1 implementation plan
 
 ## Reference
 
 - [TOON specification](https://github.com/toon-format/spec)
 - [TOON reference implementation](https://github.com/toon-format/toon)
+- [jaq](https://github.com/01mf02/jaq)
