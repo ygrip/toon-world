@@ -2,11 +2,11 @@
 
 A fast, lightweight, single-binary query and transformation tool for structured and document data, with compact [TOON](https://github.com/toon-format/spec) output by default.
 
-> **Milestone 0.2:** structured input adapters. This branch stacks on the JSON/query core from 0.1.
+> **Milestone 0.6:** HTML adapters and machine-readable byte statistics complete the current stack.
 
 ## Why
 
-Conversion alone is not the product. `toon-world` exists so different formats can be read through one interface, filtered before they enter an agent's context, and emitted in a compact representation.
+Conversion alone is not the product. `toon-world` exists so different formats can be parsed into one queryable model, filtered before they enter an agent's context, and emitted compactly.
 
 ```text
 JSON ───┐
@@ -14,139 +14,167 @@ NDJSON ─┤
 CSV ────┤
 YAML ───┤
 TOML ───┤
-XML ────┤──> adapter ──> normalized value ──> jq-compatible query ──> TOON / JSON / text
+XML ────┤
 TOON ───┤
-MD ─────┤
+MD ─────┤──> adapter ──> normalized value ──> jq-compatible query ──> TOON / JSON / text
 HTML ───┘
 ```
 
-`toon-world` embeds [`jaq`](https://github.com/01mf02/jaq), so every adapter feeds the same query engine.
+`toon-world` embeds [`jaq`](https://github.com/01mf02/jaq); Markdown helpers are jaq definitions over the normalized document model, not a second query language.
 
-## Implemented through 0.2
+## Implemented through 0.6
 
-- JSON, NDJSON/JSONL, CSV, YAML, TOML, and XML input
-- input format inference from known extensions
-- explicit `--from <format>` override
-- file input, implicit stdin, explicit `-` stdin, and raw `--data`
-- raw multiline CSV/YAML/TOML/XML/NDJSON with explicit `--from`
+- JSON, NDJSON/JSONL, CSV, YAML, TOML, XML, TOON, Markdown, and HTML input
+- extension inference plus explicit `--from`
 - jq-compatible selection/filter/projection
-- TOON default output, compact JSON, and scalar text output
-- format-specific parse error categories
-- warning diagnostics on stderr
-- unknown-extension fallback warns before assuming JSON
-- `--quiet` suppresses warnings
-- `--warnings-as-errors` turns warnings into non-zero failures before result output
+- TOON default output, compact JSON, scalar text output
+- Markdown normalized into ordered sections and typed blocks
+- document helpers: `section("...")`, `code("...")`, and `links`
+- structural and semantic HTML document models
+- `--stats` JSON byte statistics on stderr
 
-## Input contracts
+## Installation
+
+Build and install from a checkout:
+
+```bash
+# macOS / Linux
+./scripts/install.sh
+
+# Windows PowerShell
+.\scripts\install.ps1
+```
+
+Both installers use an existing Rust toolchain or install it with official rustup, build a release binary, and copy it to the user-local bin directory. They print PATH guidance instead of modifying shell profiles.
+
+## Quick usage
+
+```bash
+# Query any supported input; extensions infer the parser.
+toon-world users.json -q '.users[] | select(.active) | .name' --to text
+toon-world events.jsonl -q '.[] | select(.level == "warn") | .message' --to text
+
+# Ask for byte reduction statistics on stderr.
+toon-world users.json --stats
+
+# Experimental: flatten sparse object rows into compact sparse-TOON.
+toon-world records.json --compact > records.stoon
+toon-world records.stoon --from sparse-toon --to json
+```
+
+Run [`examples/usage.sh`](examples/usage.sh) for the same flow against checked-in sample files.
+For format-by-format examples, input/output rules, common queries, and troubleshooting, see [`docs/USAGE.md`](docs/USAGE.md).
+
+### Experimental compact sparse-TOON
+
+`--compact` uses an experimental headerless sparse-TOON dialect when its UTF-8 output is smaller than ordinary TOON. Nested object columns fold into TOON-style field groups such as `profile{name,team}`, while each row stays flat. Homogeneous child-object arrays appear as indented child tables; other child-array shapes fall back to standard TOON. `~` means absent; `null`, empty strings, and literal `"~"` stay distinct. Decode with `--from sparse-toon`; ordinary `--to toon` remains standard TOON. Legacy `@toon-world/sparse-v1` files still decode.
+
+See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) for reproducible byte and cl100k token measurements, fixture descriptions, and interpretation guidance.
+
+## HTML and statistics
+
+HTML defaults to a structural DOM-shaped model that retains tags, attributes, ordered children, scripts, and styles. Use `--semantic` for compact agent-oriented content that retains title, metadata, sections, code, lists, tables, links, images, and forms while omitting script/style payloads.
+
+```bash
+toon-world page.html --semantic -q 'section("Usage") | code("bash") | .text' --to text
+```
+
+Use `--stats` to write one JSON object to stderr without changing stdout. It contains `input_bytes`, `output_bytes`, and `reduction_percent`; `reduction_percent` is `null` for empty input.
+
+```bash
+toon-world users.json -q '.users[] | .name' --to text --stats
+```
+
+## Markdown model
+
+Markdown is normalized for retrieval rather than byte-identical reconstruction:
+
+```json
+{
+  "type": "markdown",
+  "title": "toon-world",
+  "frontmatter": "title: toon-world",
+  "sections": [
+    {
+      "heading": "Installation",
+      "level": 2,
+      "blocks": [
+        {"type":"paragraph","text":"Install it locally."},
+        {"type":"code","lang":"bash","text":"cargo install --path ."}
+      ]
+    }
+  ],
+  "links": [
+    {"text":"GitHub","href":"https://github.com/ygrip/toon-world","title":null}
+  ]
+}
+```
+
+### Section semantics
+
+- content before the first heading is retained as a preamble section with `heading: null` and `level: 0`;
+- the first H1 becomes `title`;
+- a document without H1 has `title: null`;
+- duplicate headings are allowed and `section("Name")` returns each match in source order;
+- heading levels and section order are preserved.
+
+### Block semantics
+
+Supported normalized blocks:
+
+- paragraph;
+- fenced/indented code with optional language;
+- ordered/unordered list;
+- task-list markers inside list text;
+- table headers + rows;
+- blockquote;
+- horizontal rule;
+- raw HTML block.
+
+Inline emphasis, strong, strikethrough, and inline code contribute their text meaning rather than creating formatting-only AST nodes.
+
+YAML-style frontmatter is kept as raw metadata text. It is not silently reinterpreted into a second schema.
+
+## Document queries
+
+```bash
+# exact section heading; duplicate headings produce multiple results
+toon-world README.md -q 'section("Installation")'
+
+# bash code in one section
+toon-world README.md -q 'section("Usage") | code("bash")'
+
+# all document links
+toon-world README.md -q 'links'
+
+# ordinary jq remains available
+toon-world README.md -q '.sections[] | {heading,level}'
+```
+
+A missing `section()` produces an empty jq result stream, following normal query semantics rather than inventing a Markdown-specific error.
+
+## Structured input contracts
 
 | Input | Normalization |
 | --- | --- |
 | JSON | JSON value unchanged |
-| NDJSON / JSONL | ordered array of parsed JSON values |
+| NDJSON / JSONL | ordered array of line values |
 | CSV | header row becomes object keys; every cell remains a string |
 | YAML | native scalar/container types; multiple documents become an ordered array |
 | TOML | tables/arrays/scalars mapped into the common value model |
-| XML | structural representation preserving tags (`t`), attributes (`a`), and ordered children (`c`) |
-
-### CSV is intentionally text-first
-
-```text
-001   -> "001"
-true  -> "true"
-      -> ""
-```
-
-No type guessing occurs. Duplicate or empty headers are rejected rather than silently losing fields.
-
-### XML remains structural
-
-For:
-
-```xml
-<p>Hello <strong>world</strong>!</p>
-```
-
-the child sequence remains logically equivalent to:
-
-```text
-text "Hello "
-element strong -> text "world"
-text "!"
-```
-
-That ordering matters, so the tests defend it explicitly.
-
-## Input modes
-
-All formats support file/stdin, and raw values use `--data`:
-
-```bash
-# file
-toon-world users.csv
-
-# JSON Lines file (.jsonl is inferred as NDJSON)
-toon-world events.jsonl -q '.[] | select(.level == "warn")'
-
-# stdin
-cat users.csv | toon-world --from csv
-
-# raw data
-toon-world --from csv --data $'id,name\n1,Ada\n2,Bob\n'
-toon-world --from yaml --data $'name: Ada\nactive: true\n'
-toon-world --from xml --data '<user id="1"><name>Ada</name></user>'
-```
-
-`FILE` and `--data` are mutually exclusive. When there is no filename to infer from, raw data/stdin defaults to JSON unless `--from` is supplied.
-
-## CLI
-
-```bash
-# infer format from extension
-toon-world users.csv -q '.[] | select(.role == "admin")'
-toon-world config.yaml -q '.services[] | {name,url}'
-toon-world config.toml -q '.database.host' --to text
-
-# stdin defaults to JSON, override for another format
-cat users.csv | toon-world --from csv -q '.[].name' --to text
-
-# raw data
-ntoon-world --from yaml --data $'name: Ada\nactive: true\n' -q '.name' --to text
-
-# explicit override wins over extension
-toon-world payload.json --from yaml -q '.name'
-```
-
-## Warnings and errors
-
-Unknown filename extensions fall back to JSON but emit a warning to stderr:
-
-```text
-warning[input]: unknown extension '.txt'; assuming JSON
-```
-
-The result stream stays clean:
-
-```text
-stdout -> query result only
-stderr -> warnings/errors only
-```
-
-Use:
-
-```bash
-toon-world payload.txt --quiet
-toon-world payload.txt --warnings-as-errors
-```
-
-Supplying `--from` explicitly avoids the fallback warning because the format is no longer ambiguous.
+| XML | structural representation preserving tags (`t`), attributes (`a`), and ordered children (`c`); root fragments become an ordered array |
+| TOON | decoded JSON-compatible value |
+| Markdown | title/frontmatter, ordered sections, typed blocks, link index |
 
 ## TOON compatibility
 
-Output still uses `toon-format` 0.5.x, whose published documentation declares TOON specification **v3.0** compatibility. TOON input is intentionally deferred to milestone 0.3 so that compatibility boundary stays explicit.
+The current Rust integration uses `toon-format` 0.5.x for encoding and decoding. Its published documentation declares TOON specification **v3.0** compatibility, so toon-world currently makes that same compatibility claim and no newer one.
 
 ## Testing and local verification
 
-CI is intentionally disabled for the initial milestone chain. This branch inherits the complete 0.1 query/output suite and adds adapter coverage for ordering, malformed input, raw multiline data, warning behavior, stderr/stdout isolation, CSV quoting/CRLF and string preservation, YAML aliases/multi-documents, nested TOML, XML mixed content, UTF-8 errors, extension detection, overrides, and stdin/file routing.
+CI is intentionally disabled during the initial milestone chain. Markdown tests cover preambles, missing/duplicate headings, frontmatter, block types, code with and without language, task lists, link titles, section/code helpers, extension/override routing, and invalid UTF-8, in addition to the inherited structured/TOON suite.
+
+Checked-in realistic sample files cover every supported input format. `--stats` reports JSON only on stderr, leaving normal stdout byte-for-byte unchanged.
 
 See [`docs/TESTING.md`](docs/TESTING.md) for the detailed matrix.
 
@@ -162,20 +190,22 @@ cargo build --release
 Smoke checks:
 
 ```bash
-cargo run --quiet -- --from csv --data $'id,name,active\n001,Ada,true\n002,Bob,false\n' \
-  -q '.[] | select(.active == "true") | {id,name}' --to json
-# {"id":"001","name":"Ada"}
+printf '%s' $'# Demo\n\n## Usage\n\n```bash\ncargo run\n```\n' \
+  | cargo run --quiet -- --from markdown -q 'section("Usage") | code("bash") | .text' --to text
+# cargo run
 
-cargo run --quiet -- --from yaml --data $'name: Ada\nactive: true\ncount: 2\n' \
-  -q '{name,active,count}' --to json
-# {"name":"Ada","active":true,"count":2}
+printf '%s' $'Intro.\n\n# Demo\n' \
+  | cargo run --quiet -- --from markdown -q '.sections[0].blocks[0].text' --to text
+# Intro.
 ```
 
 ## Project docs
 
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): milestone direction
 - [`docs/MILESTONES.md`](docs/MILESTONES.md): stacked PR contract/status
-- [`docs/TESTING.md`](docs/TESTING.md): local verification and coverage matrix
+- [`docs/TESTING.md`](docs/TESTING.md): verification and Markdown coverage matrix
+- [`docs/USAGE.md`](docs/USAGE.md): task-oriented CLI guide and sparse-TOON walkthrough
+- [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md): reproducible token/byte methodology and results
 - [`docs/superpowers/specs/2026-09-16-toon-world-design.md`](docs/superpowers/specs/2026-09-16-toon-world-design.md): architecture/design
 
 ## Reference
@@ -183,3 +213,4 @@ cargo run --quiet -- --from yaml --data $'name: Ada\nactive: true\ncount: 2\n' \
 - [TOON specification](https://github.com/toon-format/spec)
 - [TOON reference implementation](https://github.com/toon-format/toon)
 - [jaq](https://github.com/01mf02/jaq)
+- [pulldown-cmark](https://github.com/pulldown-cmark/pulldown-cmark)

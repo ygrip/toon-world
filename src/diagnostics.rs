@@ -31,16 +31,13 @@ pub fn resolve_warnings(
     if warnings.is_empty() || quiet {
         return Ok(String::new());
     }
-
     let rendered = warnings
         .iter()
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join("\n");
-
     if warnings_as_errors {
         bail!("error[warning-as-error]: {rendered}");
     }
-
     Ok(rendered)
 }

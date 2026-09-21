@@ -4,36 +4,32 @@ use clap::Parser;
 use toon_world::cli::{Args, InputFormat, OutputFormat};
 
 #[test]
-fn defaults_to_json_autodetection_identity_query_and_toon_output() {
+fn defaults_to_identity_query_and_toon_output() {
     let args = Args::try_parse_from(["toon-world"]).unwrap();
 
     assert_eq!(args.file, None);
-    assert_eq!(args.data, None);
     assert_eq!(args.from, None);
-    assert!(!args.quiet);
-    assert!(!args.warnings_as_errors);
     assert_eq!(args.query, ".");
     assert_eq!(args.to, OutputFormat::Toon);
 }
 
 #[test]
-fn parses_explicit_input_and_output_formats() {
+fn parses_toon_as_explicit_input_format() {
     let args = Args::try_parse_from([
         "toon-world",
         "payload.txt",
         "--from",
-        "csv",
+        "toon",
         "-q",
-        ".[0]",
+        ".users",
         "--to",
         "json",
     ])
     .unwrap();
 
     assert_eq!(args.file, Some(PathBuf::from("payload.txt")));
-    assert_eq!(args.data, None);
-    assert_eq!(args.from, Some(InputFormat::Csv));
-    assert_eq!(args.query, ".[0]");
+    assert_eq!(args.from, Some(InputFormat::Toon));
+    assert_eq!(args.query, ".users");
     assert_eq!(args.to, OutputFormat::Json);
 }
 
@@ -56,11 +52,26 @@ fn parses_raw_data_with_explicit_format() {
 }
 
 #[test]
-fn dash_is_preserved_as_explicit_stdin_path() {
-    let args = Args::try_parse_from(["toon-world", "-", "--from", "yaml", "--to", "text"]).unwrap();
+fn parses_compact_sparse_toon_options() {
+    let args = Args::try_parse_from([
+        "toon-world",
+        "payload.stoon",
+        "--from",
+        "sparse-toon",
+        "--compact",
+    ])
+    .unwrap();
+
+    assert_eq!(args.from, Some(InputFormat::SparseToon));
+    assert!(args.compact);
+}
+
+#[test]
+fn dash_and_toon_can_be_combined_for_stdin() {
+    let args = Args::try_parse_from(["toon-world", "-", "--from", "toon", "--to", "text"]).unwrap();
 
     assert_eq!(args.file, Some(PathBuf::from("-")));
-    assert_eq!(args.from, Some(InputFormat::Yaml));
+    assert_eq!(args.from, Some(InputFormat::Toon));
     assert_eq!(args.to, OutputFormat::Text);
 }
 

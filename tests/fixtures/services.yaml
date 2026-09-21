@@ -1,0 +1,6 @@
+service:
+  name: accounts-api
+  replicas: 3
+owners:
+  - platform
+  - identity

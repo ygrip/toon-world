@@ -1,0 +1,32 @@
+[
+  {
+    "uri": "classpath:features/regression/profile/AffiliateProfile.feature",
+    "keyword": "Feature",
+    "tags": [
+      {"name": "@AffiliateProfile", "type": "Tag", "location": {"line": 1, "column": 1}},
+      {"name": "@Regression", "type": "Tag", "location": {"line": 1, "column": 19}}
+    ],
+    "elements": [
+      {
+        "type": "scenario",
+        "tags": [{"name": "@Regression"}, {"name": "@Mobile"}],
+        "before": [{"result": {"duration": 541051000, "status": "passed"}, "match": {"location": "beforeScenario()"}}],
+        "after": [{"result": {"duration": 34866000, "status": "passed"}, "match": {"location": "afterScenario()"}}],
+        "steps": [
+          {
+            "keyword": "Given",
+            "result": {"duration": 29931128000, "status": "passed"},
+            "rows": [{"cells": ["username", "password"]}, {"cells": ["memberId", "secret"]}],
+            "match": {"location": "login()", "arguments": [{"val": "user", "offset": 0}, {"val": "chrome", "offset": 11}]},
+            "after": [{"embeddings": [{"mime_type": "image/png", "data": "reference", "name": "login"}]}]
+          },
+          {
+            "keyword": "Then",
+            "result": {"duration": 63854000, "status": "passed"},
+            "match": {"location": "assertPage()", "arguments": [{"val": "user", "offset": 0}]}
+          }
+        ]
+      }
+    ]
+  }
+]

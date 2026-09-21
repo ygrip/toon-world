@@ -45,6 +45,74 @@ fn queries_a_checked_in_json_sample_file() {
 }
 
 #[test]
+fn compact_cli_output_round_trips_through_sparse_toon_input() {
+    let compact = Command::cargo_bin("toon-world")
+        .unwrap()
+        .args([
+            "--data",
+            r#"[{"id":1,"profile":{"name":"Ada","team":"platform"}},{"id":2,"profile":{"name":"Grace"}}]"#,
+            "--compact",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(compact.status.success());
+    let decoded = Command::cargo_bin("toon-world")
+        .unwrap()
+        .args(["--from", "sparse-toon", "--data"])
+        .arg(String::from_utf8(compact.stdout).unwrap())
+        .args(["--to", "json"])
+        .output()
+        .unwrap();
+
+    assert!(decoded.status.success());
+    assert_eq!(
+        String::from_utf8(decoded.stdout).unwrap(),
+        r#"[{"id":1,"profile":{"name":"Ada","team":"platform"}},{"id":2,"profile":{"name":"Grace"}}]"#
+            .to_owned()
+            + "\n"
+    );
+}
+
+#[test]
+fn compact_cli_rejects_non_toon_output() {
+    let output = Command::cargo_bin("toon-world")
+        .unwrap()
+        .args(["--data", "[{\"id\":1}]", "--compact", "--to", "json"])
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8(output.stderr)
+        .unwrap()
+        .contains("--compact requires --to toon"));
+}
+
+#[test]
+fn stats_for_a_checked_in_file_stay_on_stderr() {
+    let file = fixture("users.json");
+    let output = Command::cargo_bin("toon-world")
+        .unwrap()
+        .args([
+            file.to_str().unwrap(),
+            "-q",
+            ".users[0].name",
+            "--to",
+            "text",
+            "--stats",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "Ada Lovelace\n");
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "{\"input_bytes\":329,\"output_bytes\":12,\"reduction_percent\":96.35}\n"
+    );
+}
+
+#[test]
 fn queries_a_checked_in_jsonl_sample_file_with_extension_inference() {
     let file = fixture("events.jsonl");
     let output = Command::cargo_bin("toon-world")

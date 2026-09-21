@@ -9,27 +9,39 @@ use jaq_json::Val;
 
 use crate::cli::InputFormat;
 use crate::diagnostics::Warning;
+use crate::{html, markdown, sparse};
 
 pub struct ReadResult {
     pub value: Val,
     pub warnings: Vec<Warning>,
+    pub byte_len: usize,
 }
 
 pub fn read(
     path: Option<&Path>,
     explicit_format: Option<InputFormat>,
     data: Option<&str>,
+    semantic: bool,
 ) -> Result<ReadResult> {
     let (format, warnings) = resolve_format(path, explicit_format);
-
-    let value = if let Some(data) = data {
-        parse_bytes(data.as_bytes(), format)?
+    let (value, byte_len) = if let Some(data) = data {
+        (
+            parse_bytes_with_options(data.as_bytes(), format, semantic)?,
+            data.len(),
+        )
     } else {
         let bytes = read_bytes(path)?;
-        parse_bytes(&bytes, format)?
+        let byte_len = bytes.len();
+        (
+            parse_bytes_with_options(&bytes, format, semantic)?,
+            byte_len,
+        )
     };
-
-    Ok(ReadResult { value, warnings })
+    Ok(ReadResult {
+        value,
+        warnings,
+        byte_len,
+    })
 }
 
 fn resolve_format(
@@ -39,22 +51,18 @@ fn resolve_format(
     if let Some(format) = explicit_format {
         return (format, Vec::new());
     }
-
     let Some(path) = path.filter(|path| *path != Path::new("-")) else {
         return (InputFormat::Json, Vec::new());
     };
-
     if let Some(format) = detect_format(path) {
         return (format, Vec::new());
     }
-
     let reason = path
         .extension()
         .and_then(|extension| extension.to_str())
         .filter(|extension| !extension.is_empty())
         .map(|extension| format!("unknown extension '.{extension}'"))
         .unwrap_or_else(|| "could not infer format from filename".to_owned());
-
     (
         InputFormat::Json,
         vec![Warning::new("input", format!("{reason}; assuming JSON"))],
@@ -69,11 +77,19 @@ pub fn detect_format(path: &Path) -> Option<InputFormat> {
         "yaml" | "yml" => Some(InputFormat::Yaml),
         "toml" => Some(InputFormat::Toml),
         "xml" | "xhtml" => Some(InputFormat::Xml),
+        "toon" => Some(InputFormat::Toon),
+        "sparse-toon" | "stoon" => Some(InputFormat::SparseToon),
+        "md" | "markdown" => Some(InputFormat::Markdown),
+        "html" | "htm" => Some(InputFormat::Html),
         _ => None,
     }
 }
 
 pub fn parse_bytes(bytes: &[u8], format: InputFormat) -> Result<Val> {
+    parse_bytes_with_options(bytes, format, false)
+}
+
+pub fn parse_bytes_with_options(bytes: &[u8], format: InputFormat, semantic: bool) -> Result<Val> {
     match format {
         InputFormat::Json => jaq_json::read::parse_single(bytes)
             .map_err(|error| anyhow!("error[parse:json]: {error:?}")),
@@ -83,12 +99,15 @@ pub fn parse_bytes(bytes: &[u8], format: InputFormat) -> Result<Val> {
         InputFormat::Toml => jaq_fmts::read::toml::parse(as_utf8(bytes, "toml")?)
             .map_err(|error| anyhow!("error[parse:toml]: {error}")),
         InputFormat::Xml => parse_xml(as_utf8(bytes, "xml")?),
+        InputFormat::Toon => parse_toon(as_utf8(bytes, "toon")?),
+        InputFormat::SparseToon => parse_sparse_toon(as_utf8(bytes, "sparse-toon")?),
+        InputFormat::Markdown => markdown::parse(as_utf8(bytes, "markdown")?),
+        InputFormat::Html => html::parse(as_utf8(bytes, "html")?, semantic),
     }
 }
 
 fn read_bytes(path: Option<&Path>) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
-
     match path {
         Some(path) if path != Path::new("-") => {
             File::open(path)
@@ -103,7 +122,6 @@ fn read_bytes(path: Option<&Path>) -> Result<Vec<u8>> {
                 .context("error[input]: could not read stdin")?;
         }
     }
-
     Ok(bytes)
 }
 
@@ -111,7 +129,6 @@ fn parse_ndjson(bytes: &[u8]) -> Result<Val> {
     let values = jaq_json::read::parse_many(bytes)
         .map(|value| value.map_err(|error| anyhow!("error[parse:ndjson]: {error:?}")))
         .collect::<Result<Vec<_>>>()?;
-
     Ok(values.into_iter().collect())
 }
 
@@ -121,7 +138,6 @@ fn parse_csv(bytes: &[u8]) -> Result<Val> {
         .headers()
         .map_err(|error| anyhow!("error[parse:csv]: {error}"))?
         .clone();
-
     let mut seen = HashSet::new();
     for header in headers.iter() {
         if header.is_empty() {
@@ -131,7 +147,6 @@ fn parse_csv(bytes: &[u8]) -> Result<Val> {
             bail!("error[parse:csv]: duplicate header '{header}'");
         }
     }
-
     let mut rows = Vec::new();
     for record in reader.records() {
         let record = record.map_err(|error| anyhow!("error[parse:csv]: {error}"))?;
@@ -141,7 +156,6 @@ fn parse_csv(bytes: &[u8]) -> Result<Val> {
             .map(|(header, cell)| (header.to_owned().into(), cell.to_owned().into()));
         rows.push(Val::obj(fields.collect()));
     }
-
     Ok(rows.into_iter().collect())
 }
 
@@ -149,7 +163,6 @@ fn parse_yaml(input: &str) -> Result<Val> {
     let values = jaq_fmts::read::yaml::parse_many(input)
         .map(|value| value.map_err(|error| anyhow!("error[parse:yaml]: {error}")))
         .collect::<Result<Vec<_>>>()?;
-
     Ok(collapse_single(values))
 }
 
@@ -184,6 +197,24 @@ fn parse_xml_fragment(input: &str) -> Result<Val> {
     };
 
     Ok(children.iter().cloned().collect())
+}
+
+fn parse_toon(input: &str) -> Result<Val> {
+    let value: serde_json::Value = toon_format::decode_default(input)
+        .map_err(|error| anyhow!("error[parse:toon]: {error}"))?;
+    serde_json::from_value(value)
+        .map_err(|error| anyhow!("error[parse:toon]: could not normalize decoded value: {error}"))
+}
+
+fn parse_sparse_toon(input: &str) -> Result<Val> {
+    let value = match sparse::decode(input)? {
+        Some(value) => value,
+        None => toon_format::decode_default(input)
+            .map_err(|error| anyhow!("error[parse:sparse-toon]: {error}"))?,
+    };
+    serde_json::from_value(value).map_err(|error| {
+        anyhow!("error[parse:sparse-toon]: could not normalize decoded value: {error}")
+    })
 }
 
 fn collapse_single(values: Vec<Val>) -> Val {

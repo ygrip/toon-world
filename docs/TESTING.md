@@ -1,8 +1,6 @@
 # Testing toon-world
 
-CI is intentionally disabled during the initial milestone chain. Local verification is the source of truth until CI is re-enabled.
-
-The suite optimizes for **behavioral confidence per test**, not a cosmetic coverage percentage. Each adapter is tested where silent coercion, reordering, or data loss would hurt the most.
+CI is intentionally disabled during the initial milestone chain. Local verification remains authoritative.
 
 ## Required local verification
 
@@ -13,85 +11,76 @@ cargo test --all-features
 cargo build --release
 ```
 
-A milestone is not locally verified until all four commands succeed.
+A branch is not considered locally verified until all four commands succeed.
 
-## Test layers
+## Checked-in sample files
 
-### Query/output core inherited from 0.1
+`tests/fixtures/` contains representative JSON, NDJSON, CSV, YAML, TOML, XML fragment, TOON, Markdown, and HTML files. `sample_files.rs` parses and queries each file, including XML fragment order and semantic HTML. This prevents regressions from tests that only exercise inline or temporary strings.
 
-Coverage includes:
+`--stats` coverage asserts exact input/output byte accounting and stderr-only output for a checked-in JSON sample.
 
-- identity, selection, filtering, projection;
-- ordered and empty result streams;
-- query parse/runtime errors;
-- file/stdin routing and missing-file errors;
-- CLI defaults and enum validation;
-- TOON semantic round-trip, nested/escaped values;
-- compact JSON, key order, and very large integers;
-- scalar text output, empty output, null vs empty string, and structured-value rejection.
+## Inherited coverage
 
-### Adapter tests introduced in 0.2
+Later milestones inherit the structured/query coverage from earlier milestones, including:
 
-Adapter tests call `input::parse_bytes` directly so a parser regression is distinguishable from CLI wiring.
+- jq query and output boundaries;
+- file/stdin/CLI error behavior;
+- JSON, NDJSON, CSV, YAML, TOML, XML adapters;
+- TOON decode and semantic round-trips.
+- checked-in `.jsonl` file inference and query routing through the CLI.
 
-| Adapter contract | Covered |
+## Markdown coverage introduced in 0.4
+
+| Contract | Covered |
 | --- | --- |
-| extension detection, case-insensitive | yes |
-| explicit `--from` override | yes |
-| unknown extension JSON fallback | yes |
-| non-JSON stdin with `--from` | yes |
-| NDJSON/JSONL preserves line order | yes |
-| checked-in `.jsonl` file is inferred and queried through the CLI | yes |
-| NDJSON tolerates surrounding whitespace | yes |
-| malformed NDJSON labeled correctly | yes |
-| CSV header-to-object mapping | yes |
-| CSV cells remain strings | yes |
-| CSV preserves leading zeros | yes |
-| CSV preserves empty string | yes |
-| CSV quoted comma/quote handling | yes |
-| CSV CRLF input | yes |
-| duplicate/empty CSV headers rejected | yes |
-| malformed-width CSV labeled correctly | yes |
-| YAML bool/number/null types | yes |
-| YAML anchors/aliases | yes |
-| multi-document YAML order | yes |
-| TOML scalar/array mapping | yes |
-| TOML nested tables | yes |
-| XML tag/attribute/child mapping | yes |
-| XML mixed-content order | yes |
-| multiple XML roots preserve order | yes |
-| invalid UTF-8 labeled per text format | yes |
+| `.md` / `.markdown` detection | yes |
+| case-insensitive Markdown extension | yes |
+| explicit `--from markdown` | yes |
+| explicit override over misleading extension | yes |
+| title from first H1 | yes |
+| no-H1 title remains null | yes |
+| preamble before first heading retained | yes |
+| section order | yes |
+| heading levels | yes |
+| YAML-style frontmatter retained raw | yes |
+| paragraph normalization | yes |
+| inline emphasis/code flattened to text meaning | yes |
+| duplicate heading lookup preserves order | yes |
+| missing `section()` returns empty stream | yes |
+| fenced code language | yes |
+| code block without language uses null | yes |
+| `code("lang")` helper | yes |
+| list normalization | yes |
+| task-list markers | yes |
+| table headers/rows | yes |
+| blockquotes | yes |
+| horizontal rules | yes |
+| raw HTML block retention | yes |
+| link text/href/title index | yes |
+| invalid UTF-8 error category | yes |
 
-## Normalization invariants
+## Document test philosophy
 
-These invariants are intentionally tested because they are easy to violate while trying to be clever:
+Markdown normalization is retrieval-oriented, not byte-identical reconstruction. Tests therefore defend **document meaning and queryability**, not which Markdown spelling produced it.
 
-### CSV
+For example, emphasis nodes are intentionally flattened:
 
-CSV is text-first. The adapter does **not** infer types.
-
-```text
-001   -> "001"
-true  -> "true"
-      -> ""
+```md
+Use **bold**, *italic*, and `code`.
 ```
 
-If callers want numbers or booleans, they can convert explicitly in jq.
+becomes semantic paragraph text equivalent to:
 
-### NDJSON
+```text
+Use bold, italic, and code.
+```
 
-Each parsed JSON value becomes one ordered array element. Input line order is preserved.
+Likewise, `section("Name")` is tested as a jaq helper over the normalized `sections` array. Duplicate headings are allowed and must return multiple values in source order.
 
-### YAML / TOML
+## Regression rule
 
-Native scalar types are retained where the parser exposes them through the common value model.
+When a Markdown bug is reported, prefer a minimal source fragment plus an assertion on the normalized value or helper output. Avoid snapshotting the entire document unless the whole schema is under test; enormous snapshots mostly prove that enormous snapshots can be reviewed poorly.
 
-### XML
+## Compact sparse-TOON experiment
 
-The structural model preserves element tags, attributes, and ordered child content. Mixed text/element sequences are tested because flattening them would destroy meaning.
-
-## Adding tests
-
-For each new adapter or behavior, prefer the smallest test that proves one invariant. Add CLI tests only where command routing itself is the behavior; parser semantics belong in direct adapter tests.
-
-Round-trip tests should decode and compare semantic values instead of asserting serializer punctuation whenever possible.
+The sparse-TOON suite covers headerless encode/decode, nested field groups, indented child arrays, TOON key quoting, absent/null/empty distinction, legacy sparse-v1 decoding, standard-TOON fallback, and CLI routing. `compact_benchmarks.rs` checks that compact output never exceeds standard TOON byte length for checked-in regression fixtures. Generated matrix reporting keeps `cl100k_base` as benchmark-only reference data; runtime selection is byte-based.
