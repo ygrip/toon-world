@@ -1,86 +1,61 @@
 # toon-world roadmap
 
-`toon-world` is a universal query/transform bridge whose default structured output is TOON. Conversion exists to make many formats queryable through one compact agent- and shell-friendly pipeline.
+`toon-world` is a universal query/transform bridge whose default structured output is TOON. The goal is one compact query layer across structured and document formats.
 
 ## 0.1 — query core
 
-Implemented in `feat/query-core`:
-
-- JSON file/stdin input;
-- embedded jaq;
-- TOON / compact JSON / scalar text output;
-- deterministic error categories and focused tests.
+Implemented: JSON file/stdin, embedded jaq, TOON/JSON/text output, deterministic errors, focused tests.
 
 ## 0.2 — structured adapters
 
-Implemented in `feat/structured-adapters`:
+Implemented: NDJSON/JSONL, CSV, YAML, TOML, structural XML.
 
-- NDJSON / JSONL;
-- CSV as header-keyed string data;
-- YAML;
-- TOML;
-- structural XML.
+Key contracts:
 
-All adapters feed the same common value/query layer.
+- NDJSON preserves value order;
+- CSV remains text-first;
+- YAML/TOML retain native scalar/container types where representable;
+- XML preserves ordered mixed content.
 
 ## 0.3 — TOON input
 
-Status: implemented on this branch, local verification required.
-
-- `.toon` detection;
-- `--from toon`;
-- TOON decode into the common value model;
-- direct jaq querying;
-- semantic round-trip coverage;
-- compatibility claim pinned to the selected `toon-format` version.
+Implemented: `.toon` detection, `--from toon`, decode into the common model, semantic round-trip coverage, compatibility pinned to the selected `toon-format` release.
 
 ## 0.4 — Markdown
 
-Normalize Markdown for retrieval:
+Status: implemented on this branch, local verification required.
 
-- title/frontmatter;
+Normalized model:
+
+- first H1 as title;
+- raw YAML-style frontmatter;
 - ordered sections + heading levels;
-- paragraphs, code, lists, tables, blockquotes, rules;
-- links.
+- paragraph/code/list/table/blockquote/rule/raw-HTML blocks;
+- link index.
 
-Planned helper examples:
+Helpers:
 
 ```bash
 toon-world README.md -q 'section("Installation")'
 toon-world README.md -q 'section("Usage") | code("bash")'
+toon-world README.md -q 'links'
 ```
 
-Helpers remain jaq definitions over the normalized model.
+Helpers are jaq definitions, not a second query language.
 
 ## 0.5 — HTML
 
-Support default structural DOM and explicit `--semantic` content extraction. Semantic mode keeps title, metadata, sections, text blocks, code, lists, tables, links, images, and forms while excluding scripts/styles.
+Add default structural DOM normalization and explicit `--semantic` content extraction. Semantic mode should expose title, metadata, sections, code, lists, tables, links, images, and forms while excluding script/style payloads.
 
 ## 0.6 — measurement
 
-Add `--stats` for raw input bytes vs rendered output bytes, absolute change, and percentage reduction/increase. Tokenizer-specific estimates remain optional future work.
+Add `--stats` for raw input bytes, rendered output bytes, absolute delta, and percentage reduction/increase. Tokenizer-specific estimates remain optional future work.
 
-Do not add redundant `--keep`, `--drop`, or `--drop-null` flags while jq already expresses those transformations.
+Do not add `--keep`, `--drop`, or `--drop-null`: jq already expresses those transformations and duplicating them would create competing interfaces for the same operation.
 
 ## Experimental — sparse heterogeneous tables
 
-Research a reversible extension such as:
-
-```text
-[3]{type,repo,pr,key}:
-  github,punakawan,34,~
-  jira,~,~,ABC-1
-  github,mom,12,~
-```
-
-Candidate semantics:
-
-- `~` = property absent;
-- `null` = JSON null;
-- `""` = empty string;
-- row order preserved.
-
-Only advance this if representative benchmarks show material context savings without sacrificing reliable decoding/comprehension.
+Research a reversible extension that distinguishes missing, null, and empty values while preserving row order. Only stabilize it if representative size/token benchmarks show material gains and decoding remains reliable.
 
 ## Release shape
 

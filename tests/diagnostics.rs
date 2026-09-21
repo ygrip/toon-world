@@ -5,14 +5,14 @@ use tempfile::Builder;
 use toon_world::diagnostics::{resolve_warnings, Warning};
 
 #[test]
-fn warning_policies_are_stable() {
+fn warning_policy_supports_suppress_and_escalate() {
     let warnings = vec![Warning::new("input", "fallback")];
     assert_eq!(resolve_warnings(&warnings, true, false).unwrap(), "");
     assert!(resolve_warnings(&warnings, false, true).is_err());
 }
 
 #[test]
-fn unknown_extension_warning_stays_on_stderr() {
+fn unknown_extension_warning_does_not_pollute_stdout() {
     let mut file = Builder::new().suffix(".txt").tempfile().unwrap();
     file.write_all(br#"{"name":"Ada"}"#).unwrap();
     let output = Command::cargo_bin("toon-world")

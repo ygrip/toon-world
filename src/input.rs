@@ -9,6 +9,7 @@ use jaq_json::Val;
 
 use crate::cli::InputFormat;
 use crate::diagnostics::Warning;
+use crate::markdown;
 
 pub struct ReadResult {
     pub value: Val,
@@ -64,6 +65,7 @@ pub fn detect_format(path: &Path) -> Option<InputFormat> {
         "toml" => Some(InputFormat::Toml),
         "xml" | "xhtml" => Some(InputFormat::Xml),
         "toon" => Some(InputFormat::Toon),
+        "md" | "markdown" => Some(InputFormat::Markdown),
         _ => None,
     }
 }
@@ -79,6 +81,7 @@ pub fn parse_bytes(bytes: &[u8], format: InputFormat) -> Result<Val> {
             .map_err(|error| anyhow!("error[parse:toml]: {error}")),
         InputFormat::Xml => parse_xml(as_utf8(bytes, "xml")?),
         InputFormat::Toon => parse_toon(as_utf8(bytes, "toon")?),
+        InputFormat::Markdown => markdown::parse(as_utf8(bytes, "markdown")?),
     }
 }
 

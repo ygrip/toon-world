@@ -11,6 +11,7 @@ pub enum InputFormat {
     Toml,
     Xml,
     Toon,
+    Markdown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -24,7 +25,7 @@ pub enum OutputFormat {
 #[command(
     name = "toon-world",
     version,
-    about = "Query structured data and emit compact TOON"
+    about = "Query structured and document data and emit compact TOON"
 )]
 pub struct Args {
     /// Input file. Reads stdin when omitted or when FILE is '-'.
