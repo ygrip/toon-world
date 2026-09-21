@@ -2,11 +2,9 @@
 
 CI is intentionally disabled during the initial milestone chain. Local verification is the source of truth until CI is re-enabled.
 
-The test suite favors **behavior and data-integrity boundaries** over a raw coverage percentage. A line can be executed without proving anything useful; humans have spent decades perfecting that particular achievement.
+The suite optimizes for **behavioral confidence per test**, not a cosmetic coverage percentage. Each adapter is tested where silent coercion, reordering, or data loss would hurt the most.
 
 ## Required local verification
-
-Run all four commands before accepting a milestone:
 
 ```bash
 cargo fmt --check
@@ -15,116 +13,85 @@ cargo test --all-features
 cargo build --release
 ```
 
-A milestone PR is not considered locally verified until all four commands succeed.
+A milestone is not locally verified until all four commands succeed.
 
 ## Test layers
 
-### Library behavior
+### Query/output core inherited from 0.1
 
-Small tests call public modules directly and validate one contract at a time:
+Coverage includes:
 
-- query execution and error categorization;
-- output normalization and serialization;
-- warning rendering/suppression/escalation;
-- input adapter normalization in later milestones;
-- document helpers and semantic models in later milestones.
+- identity, selection, filtering, projection;
+- ordered and empty result streams;
+- query parse/runtime errors;
+- file/stdin routing and missing-file errors;
+- CLI defaults and enum validation;
+- TOON semantic round-trip, nested/escaped values;
+- compact JSON, key order, and very large integers;
+- scalar text output, empty output, null vs empty string, and structured-value rejection.
 
-These tests should assert semantic values, not incidental formatting, unless formatting itself is the contract.
+### Adapter tests introduced in 0.2
 
-### CLI contract
+Adapter tests call `input::parse_bytes` directly so a parser regression is distinguishable from CLI wiring.
 
-CLI tests cover the boundaries that module tests cannot:
-
-- argument defaults and validation;
-- file vs stdin vs raw `--data` routing;
-- mutually exclusive input modes;
-- warning-policy flag conflicts;
-- exit status and stderr category;
-- stdout/stderr separation;
-- stdout newline behavior;
-- end-to-end query/output composition.
-
-### Round-trip tests
-
-Where a format contract is reversible, prefer semantic round-trip checks:
-
-```text
-source value -> encoder -> decoder -> equivalent value
-```
-
-Do not assert serializer punctuation when decoding can prove the stronger property.
-
-## Milestone 0.1 coverage matrix
-
-| Contract | Covered |
+| Adapter contract | Covered |
 | --- | --- |
-| default identity query | yes |
-| field selection | yes |
-| array filtering | yes |
-| object projection | yes |
-| ordered multiple query results | yes |
-| empty query result stream | yes |
-| query parse/compile error category | yes |
-| query runtime error category | yes |
-| file input | yes |
-| implicit stdin | yes |
-| explicit `-` stdin | yes |
-| raw `--data` input | yes |
-| `FILE` + `--data` conflict | yes |
-| malformed raw JSON error category | yes |
-| missing file error category | yes |
-| malformed JSON error category | yes |
-| CLI defaults and enum validation | yes |
-| `--quiet` / `--warnings-as-errors` conflict | yes |
-| warning category rendering | yes |
-| warning suppression | yes |
-| warning escalation | yes |
-| no-warning behavior | yes |
-| TOON default output | yes |
-| TOON semantic round-trip | yes |
-| nested/escaped TOON values | yes |
-| compact JSON output | yes |
-| object key order at JSON boundary | yes |
-| very large integer preservation | yes |
-| scalar text output | yes |
-| empty text result stream | yes |
-| null vs empty string | yes |
-| structured value rejection in text mode | yes |
+| extension detection, case-insensitive | yes |
+| explicit `--from` override | yes |
+| unknown extension JSON fallback | yes |
+| non-JSON stdin with `--from` | yes |
+| NDJSON/JSONL preserves line order | yes |
+| checked-in `.jsonl` file is inferred and queried through the CLI | yes |
+| NDJSON tolerates surrounding whitespace | yes |
+| malformed NDJSON labeled correctly | yes |
+| CSV header-to-object mapping | yes |
+| CSV cells remain strings | yes |
+| CSV preserves leading zeros | yes |
+| CSV preserves empty string | yes |
+| CSV quoted comma/quote handling | yes |
+| CSV CRLF input | yes |
+| duplicate/empty CSV headers rejected | yes |
+| malformed-width CSV labeled correctly | yes |
+| YAML bool/number/null types | yes |
+| YAML anchors/aliases | yes |
+| multi-document YAML order | yes |
+| TOML scalar/array mapping | yes |
+| TOML nested tables | yes |
+| XML tag/attribute/child mapping | yes |
+| XML mixed-content order | yes |
+| multiple XML roots preserve order | yes |
+| invalid UTF-8 labeled per text format | yes |
 
-## Diagnostic contract
+## Normalization invariants
 
-Data and diagnostics must never share a stream:
+These invariants are intentionally tested because they are easy to violate while trying to be clever:
+
+### CSV
+
+CSV is text-first. The adapter does **not** infer types.
 
 ```text
-stdout -> result data only
-stderr -> warnings and errors only
+001   -> "001"
+true  -> "true"
+      -> ""
 ```
 
-Warnings are non-fatal unless `--warnings-as-errors` is selected. `--quiet` suppresses warnings. These policies are mutually exclusive to avoid ambiguous behavior.
+If callers want numbers or booleans, they can convert explicitly in jq.
 
-Later milestones must add integration tests whenever they introduce a concrete warning source, not merely rely on the generic warning-module tests.
+### NDJSON
+
+Each parsed JSON value becomes one ordered array element. Input line order is preserved.
+
+### YAML / TOML
+
+Native scalar types are retained where the parser exposes them through the common value model.
+
+### XML
+
+The structural model preserves element tags, attributes, and ordered child content. Mixed text/element sequences are tested because flattening them would destroy meaning.
 
 ## Adding tests
 
-A new behavior should normally add the smallest test that would fail if that behavior regressed. Prefer adding to an existing focused test file rather than creating a new file for every edge case.
+For each new adapter or behavior, prefer the smallest test that proves one invariant. Add CLI tests only where command routing itself is the behavior; parser semantics belong in direct adapter tests.
 
-Adapter milestones should always cover, where applicable:
-
-1. normal input;
-2. malformed input;
-3. ordering;
-4. null/empty/absent distinctions;
-5. source-specific type preservation;
-6. extension detection and explicit override;
-7. raw `--data` + explicit format;
-8. one representative CLI query;
-9. warnings introduced by adapter fallback/recovery;
-10. round-trip behavior when supported.
-
-Document-format milestones should additionally cover:
-
-- heading/section order;
-- block extraction;
-- links and metadata;
-- semantic filtering rules;
-- helper functions over the normalized model.
+Round-trip tests should decode and compare semantic values instead of asserting serializer punctuation whenever possible.

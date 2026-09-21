@@ -2,159 +2,153 @@
 
 A fast, lightweight, single-binary query and transformation tool for structured and document data, with compact [TOON](https://github.com/toon-format/spec) output by default.
 
-> **Milestone 0.1:** JSON query core. This branch intentionally contains only the execution spine; additional input adapters are separate stacked PRs.
+> **Milestone 0.2:** structured input adapters. This branch stacks on the JSON/query core from 0.1.
 
 ## Why
 
-Conversion alone is not the product. `toon-world` exists so data can be filtered before it enters an agent's context, using one jq-compatible query layer and a compact default output.
-
-Milestone 0.1 implements:
-
-```text
-JSON file / stdin / --data -> jaq value -> jq-compatible query -> TOON / JSON / text
-```
-
-The planned full architecture is:
+Conversion alone is not the product. `toon-world` exists so different formats can be read through one interface, filtered before they enter an agent's context, and emitted in a compact representation.
 
 ```text
 JSON ───┐
+NDJSON ─┤
+CSV ────┤
 YAML ───┤
 TOML ───┤
-CSV ────┤
-NDJSON ─┤
 XML ────┤──> adapter ──> normalized value ──> jq-compatible query ──> TOON / JSON / text
-HTML ───┤
+TOON ───┤
 MD ─────┤
-TOON ───┘
+HTML ───┘
 ```
 
-`toon-world` embeds [`jaq`](https://github.com/01mf02/jaq) rather than inventing another query language.
+`toon-world` embeds [`jaq`](https://github.com/01mf02/jaq), so every adapter feeds the same query engine.
 
-## Implemented in 0.1
+## Implemented through 0.2
 
-- JSON file input
-- JSON stdin input, implicit or explicit `-`
-- raw JSON input via `--data`
-- `FILE` and `--data` are mutually exclusive
-- jq-compatible queries through embedded `jaq`
-- identity query when `-q` is omitted
-- TOON output by default
-- compact JSON output via `--to json`
-- scalar text output via `--to text`
-- multiple query results collected for structured output
-- explicit input / parse / query / encoding error categories
-- reusable warning diagnostics with `warning[category]: ...`
-- `--quiet` to suppress warnings
-- `--warnings-as-errors` to fail on warnings
-- warning output is stderr-only and never contaminates stdout data
-- preservation of object order and arbitrary-precision JSON numbers at the serialization boundary
+- JSON, NDJSON/JSONL, CSV, YAML, TOML, and XML input
+- input format inference from known extensions
+- explicit `--from <format>` override
+- file input, implicit stdin, explicit `-` stdin, and raw `--data`
+- raw multiline CSV/YAML/TOML/XML/NDJSON with explicit `--from`
+- jq-compatible selection/filter/projection
+- TOON default output, compact JSON, and scalar text output
+- format-specific parse error categories
+- warning diagnostics on stderr
+- unknown-extension fallback warns before assuming JSON
+- `--quiet` suppresses warnings
+- `--warnings-as-errors` turns warnings into non-zero failures before result output
+
+## Input contracts
+
+| Input | Normalization |
+| --- | --- |
+| JSON | JSON value unchanged |
+| NDJSON / JSONL | ordered array of parsed JSON values |
+| CSV | header row becomes object keys; every cell remains a string |
+| YAML | native scalar/container types; multiple documents become an ordered array |
+| TOML | tables/arrays/scalars mapped into the common value model |
+| XML | structural representation preserving tags (`t`), attributes (`a`), and ordered children (`c`) |
+
+### CSV is intentionally text-first
+
+```text
+001   -> "001"
+true  -> "true"
+      -> ""
+```
+
+No type guessing occurs. Duplicate or empty headers are rejected rather than silently losing fields.
+
+### XML remains structural
+
+For:
+
+```xml
+<p>Hello <strong>world</strong>!</p>
+```
+
+the child sequence remains logically equivalent to:
+
+```text
+text "Hello "
+element strong -> text "world"
+text "!"
+```
+
+That ordering matters, so the tests defend it explicitly.
 
 ## Input modes
 
-Exactly one source is used:
+All formats support file/stdin, and raw values use `--data`:
 
 ```bash
 # file
-toon-world data.json
+toon-world users.csv
+
+# JSON Lines file (.jsonl is inferred as NDJSON)
+toon-world events.jsonl -q '.[] | select(.level == "warn")'
 
 # stdin
-cat data.json | toon-world
-printf '%s' '{"name":"Ada"}' | toon-world
+cat users.csv | toon-world --from csv
 
-# raw argument
-toon-world --data '{"name":"Ada","active":true}'
+# raw data
+toon-world --from csv --data $'id,name\n1,Ada\n2,Bob\n'
+toon-world --from yaml --data $'name: Ada\nactive: true\n'
+toon-world --from xml --data '<user id="1"><name>Ada</name></user>'
 ```
 
-`FILE` and `--data` cannot be combined. Raw data is parsed directly from the argument; toon-world does not create a temporary file.
+`FILE` and `--data` are mutually exclusive. When there is no filename to infer from, raw data/stdin defaults to JSON unless `--from` is supplied.
 
 ## CLI
 
-Convert using the identity query:
-
 ```bash
-toon-world data.json
-cat data.json | toon-world
-toon-world --data '{"name":"Ada"}'
+# infer format from extension
+toon-world users.csv -q '.[] | select(.role == "admin")'
+toon-world config.yaml -q '.services[] | {name,url}'
+toon-world config.toml -q '.database.host' --to text
+
+# stdin defaults to JSON, override for another format
+cat users.csv | toon-world --from csv -q '.[].name' --to text
+
+# raw data
+ntoon-world --from yaml --data $'name: Ada\nactive: true\n' -q '.name' --to text
+
+# explicit override wins over extension
+toon-world payload.json --from yaml -q '.name'
 ```
-
-Filter or project using jq syntax:
-
-```bash
-toon-world data.json -q '.users[] | select(.active == true)'
-toon-world data.json -q '.users[] | {id,name}'
-toon-world --data '{"users":[{"id":1,"active":true}]}' -q '.users[] | select(.active)'
-```
-
-Choose output:
-
-```bash
-toon-world data.json -q '.users' --to toon
-toon-world data.json -q '.users' --to json
-toon-world package.json -q '.version' --to text
-```
-
-Structured output collects multiple jq results into one array. `--to text` emits scalar results one per line and rejects arrays/objects so shell output is not ambiguously serialized.
 
 ## Warnings and errors
 
-Diagnostics are intentionally separate from data output:
+Unknown filename extensions fall back to JSON but emit a warning to stderr:
 
 ```text
-stdout -> result data only
-stderr -> warnings and errors only
+warning[input]: unknown extension '.txt'; assuming JSON
 ```
 
-Errors use stable categories such as:
+The result stream stays clean:
 
 ```text
-error[input]: ...
-error[parse:json]: ...
-error[query]: ...
-error[encode:toon]: ...
+stdout -> query result only
+stderr -> warnings/errors only
 ```
 
-Warnings use:
+Use:
 
-```text
-warning[input]: ...
-warning[format]: ...
+```bash
+toon-world payload.txt --quiet
+toon-world payload.txt --warnings-as-errors
 ```
 
-Use `--quiet` to suppress warnings or `--warnings-as-errors` to turn any warning into a non-zero failure. Those two flags are mutually exclusive.
-
-Milestone 0.1 provides the warning infrastructure. Later adapters introduce concrete warning sources such as unknown-extension fallback.
-
-## Query and output contracts
-
-- `.` is the default query.
-- Zero structured query results encode as `[]`.
-- Zero text query results emit no bytes.
-- A single structured result remains that value rather than being wrapped in an array.
-- Multiple structured results preserve query order inside one array.
-- JSON output is compact.
-- TOON output is decoded in tests to verify semantic round-trip rather than punctuation.
-- Text output accepts null, booleans, numbers, and strings; arrays/objects are rejected.
+Supplying `--from` explicitly avoids the fallback warning because the format is no longer ambiguous.
 
 ## TOON compatibility
 
-The current Rust integration uses `toon-format` 0.5.x, whose published documentation declares TOON specification **v3.0** compatibility. This milestone does **not** claim compatibility with newer TOON spec revisions.
-
-The encoder is isolated behind `output` so a future TOON implementation upgrade does not disturb input/query architecture.
-
-## Principles
-
-1. **Query first**: parse once, query the normalized value, encode only the result.
-2. **Lossless by default**: conversion must not silently drop, regroup, or hoist data.
-3. **Standard TOON first**: extensions are explicit, versioned, benchmarked, and opt-in.
-4. **One executable**: no runtime dependency on jq, Node, Python, or companion binaries.
-5. **stdin/stdout first**: shell and agent pipelines are primary use cases.
-6. **Measure, do not guess**: optimizations need reproducible byte/token/performance evidence.
+Output still uses `toon-format` 0.5.x, whose published documentation declares TOON specification **v3.0** compatibility. TOON input is intentionally deferred to milestone 0.3 so that compatibility boundary stays explicit.
 
 ## Testing and local verification
 
-CI is intentionally disabled during the initial milestone chain. The test suite focuses on behavior boundaries and silent-data-loss risks, including raw data/file conflicts, warning policy, query failures, empty streams, nested/escaped TOON values, large integers, CLI argument defaults, file/stdin routing, and null-vs-empty-string behavior.
+CI is intentionally disabled for the initial milestone chain. This branch inherits the complete 0.1 query/output suite and adds adapter coverage for ordering, malformed input, raw multiline data, warning behavior, stderr/stdout isolation, CSV quoting/CRLF and string preservation, YAML aliases/multi-documents, nested TOML, XML mixed content, UTF-8 errors, extension detection, overrides, and stdin/file routing.
 
-See [`docs/TESTING.md`](docs/TESTING.md) for the coverage matrix and test policy.
+See [`docs/TESTING.md`](docs/TESTING.md) for the detailed matrix.
 
 Run locally:
 
@@ -168,22 +162,21 @@ cargo build --release
 Smoke checks:
 
 ```bash
-cargo run --quiet -- --data '{"users":[{"id":1,"name":"Ada","active":true},{"id":2,"name":"Bob","active":false}]}' \
-  -q '.users[] | select(.active) | {id,name}' --to json
-# {"id":1,"name":"Ada"}
+cargo run --quiet -- --from csv --data $'id,name,active\n001,Ada,true\n002,Bob,false\n' \
+  -q '.[] | select(.active == "true") | {id,name}' --to json
+# {"id":"001","name":"Ada"}
 
-printf '%s' '{"version":"0.1.0"}' \
-  | cargo run --quiet -- -q '.version' --to text
-# 0.1.0
+cargo run --quiet -- --from yaml --data $'name: Ada\nactive: true\ncount: 2\n' \
+  -q '{name,active,count}' --to json
+# {"name":"Ada","active":true,"count":2}
 ```
 
 ## Project docs
 
-- [`docs/ROADMAP.md`](docs/ROADMAP.md): planned milestone sequence
-- [`docs/MILESTONES.md`](docs/MILESTONES.md): stacked PR contract and status
-- [`docs/TESTING.md`](docs/TESTING.md): verification policy and coverage matrix
+- [`docs/ROADMAP.md`](docs/ROADMAP.md): milestone direction
+- [`docs/MILESTONES.md`](docs/MILESTONES.md): stacked PR contract/status
+- [`docs/TESTING.md`](docs/TESTING.md): local verification and coverage matrix
 - [`docs/superpowers/specs/2026-09-16-toon-world-design.md`](docs/superpowers/specs/2026-09-16-toon-world-design.md): architecture/design
-- [`docs/superpowers/plans/2026-09-16-query-core.md`](docs/superpowers/plans/2026-09-16-query-core.md): 0.1 implementation plan
 
 ## Reference
 

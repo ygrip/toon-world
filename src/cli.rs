@@ -3,6 +3,16 @@ use std::path::PathBuf;
 use clap::{Parser, ValueEnum};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum InputFormat {
+    Json,
+    Ndjson,
+    Csv,
+    Yaml,
+    Toml,
+    Xml,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum OutputFormat {
     Toon,
     Json,
@@ -23,6 +33,10 @@ pub struct Args {
     /// Raw input data. Mutually exclusive with FILE.
     #[arg(long, conflicts_with = "file")]
     pub data: Option<String>,
+
+    /// Override input format. Otherwise inferred from a known extension, falling back to JSON.
+    #[arg(long, value_enum)]
+    pub from: Option<InputFormat>,
 
     /// Suppress non-fatal warnings.
     #[arg(long, conflicts_with = "warnings_as_errors")]

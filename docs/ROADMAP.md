@@ -1,55 +1,90 @@
 # toon-world roadmap
 
-`toon-world` is a universal query/transform bridge whose default structured output is TOON. The goal is one fast executable that can parse different formats, query only the needed data, and emit compact context.
+`toon-world` is a universal query/transform bridge whose default structured output is TOON. The value is not conversion by itself; it is being able to parse different formats, query only the needed data, and emit a compact result through one executable.
 
-## 0.1 — query core
+## Milestone 0.1 — query core
 
-Status: implemented on this branch, local verification required.
+Status: implemented in `feat/query-core`, local verification required.
 
 - Rust single binary
 - JSON file/stdin input
 - embedded jaq query engine
-- identity query by default
 - TOON / compact JSON / scalar text output
 - deterministic error categories
 - high-value query/output/CLI tests
 
-## 0.2 — structured adapters
+## Milestone 0.2 — structured adapters
 
-Planned as a separate stacked PR:
+Status: implemented on this branch, local verification required.
 
-- NDJSON / JSONL
-- CSV
-- YAML
-- TOML
-- structural XML
+Inputs:
 
-The adapter boundary must remain independent from the query engine.
+1. NDJSON / JSONL
+2. CSV
+3. YAML
+4. TOML
+5. XML
 
-## 0.3 — TOON input
+The adapter boundary stays independent from the query engine. Queries operate on normalized values, not source syntax.
 
-Add TOON decoding as first-class input, with the compatibility claim pinned to the TOON version actually supported by the selected Rust implementation.
+Normalization decisions:
 
-## 0.4 — Markdown
+- NDJSON becomes an ordered array;
+- CSV headers become keys and cells remain strings;
+- YAML/TOML retain native scalar/container types where representable;
+- XML remains structural and preserves ordered mixed content.
 
-Normalize Markdown into a retrieval-oriented document model with ordered sections, typed blocks, frontmatter, links, and jaq helpers such as `section()` and `code()`.
+## Milestone 0.3 — TOON input
 
-## 0.5 — HTML
+Add TOON decoding as first-class queryable input. Compatibility must remain explicitly pinned to the TOON version supported by the selected Rust implementation.
+
+## Milestone 0.4 — Markdown
+
+Normalize Markdown into a retrieval-oriented document model:
+
+- title/frontmatter;
+- ordered sections and heading levels;
+- paragraphs, code, lists, tables, blockquotes, rules;
+- document links.
+
+Add jq helpers such as:
+
+```bash
+toon-world README.md -q 'section("Installation")'
+toon-world README.md -q 'section("Usage") | code("bash")'
+```
+
+Helpers are jaq definitions over the normalized model, not another DSL.
+
+## Milestone 0.5 — HTML
 
 Support two explicit contracts:
 
-- structural DOM model by default;
-- content-oriented `--semantic` mode for agents.
+- default structural DOM model;
+- `--semantic` content-oriented model for agents.
 
-## 0.6 — measurement
+Semantic mode extracts title, metadata, sections, text blocks, code, lists, tables, links, images, and forms while excluding script/style payloads.
 
-Add `--stats` for raw input bytes, rendered output bytes, absolute delta, and percentage reduction/increase. Tokenizer-specific estimates can remain optional future work if they would burden the default binary.
+## Milestone 0.6 — measurement
 
-Do not add `--keep`, `--drop`, or `--drop-null` as parallel interfaces for operations jq already expresses.
+Add `--stats` so optimization claims are measurable rather than decorative.
+
+Initial stats should report at least:
+
+- raw input bytes;
+- rendered output bytes;
+- absolute byte change;
+- percentage reduction/increase.
+
+Tokenizer-specific counts can come later if they do not burden the default binary.
+
+### Explicit non-goal
+
+Do **not** add `--keep`, `--drop`, or `--drop-null` merely as aliases for operations jq already expresses. One query language is enough trouble for civilized society.
 
 ## Experimental — sparse heterogeneous tables
 
-Research a reversible extension for overlapping object shapes:
+Research a reversible extension for arrays whose objects overlap but do not share identical fields:
 
 ```text
 [3]{type,repo,pr,key}:
@@ -65,17 +100,17 @@ Candidate semantics:
 - `""` = empty string;
 - row order preserved.
 
-Only stabilize this if representative benchmarks prove material context savings and reliable decoding/comprehension.
+The experiment only earns a stable format commitment if it beats standard TOON on representative size/token benchmarks **and** remains reliably decodable/comprehensible.
 
 ## Release shape
 
-- `0.1`: JSON query core
-- `0.2`: structured adapters
-- `0.3`: TOON input
-- `0.4`: Markdown
-- `0.5`: HTML
-- `0.6`: byte-size stats
-- `0.x-experimental`: sparse tables
-- `1.0`: stable CLI + documented contracts + reproducible benchmarks
+- `0.1`: JSON + jq-compatible query core
+- `0.2`: NDJSON/CSV/YAML/TOML/XML adapters
+- `0.3`: TOON input with pinned compatibility
+- `0.4`: Markdown normalized model + helpers
+- `0.5`: HTML structural/semantic model + helpers
+- `0.6`: byte-size statistics
+- `0.x-experimental`: sparse heterogeneous-table mode
+- `1.0`: stable CLI, documented format contracts, reproducible performance/context benchmarks
 
-See [`MILESTONES.md`](MILESTONES.md) for the stacked PR chain and [`TESTING.md`](TESTING.md) for verification/coverage policy.
+See [`MILESTONES.md`](MILESTONES.md) for the stacked PR chain and [`TESTING.md`](TESTING.md) for local verification and coverage expectations.
