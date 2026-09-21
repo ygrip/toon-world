@@ -10,6 +10,7 @@ pub enum InputFormat {
     Yaml,
     Toml,
     Xml,
+    Toon,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
