@@ -1,4 +1,8 @@
-# toon-world
+<p align="center">
+  <img src="assets/toon-world-logo.png" alt="toon-world jester logo" width="360" />
+</p>
+
+<h1 align="center">toon-world</h1>
 
 A fast, lightweight, single-binary query and transformation tool for structured and document data, with compact [TOON](https://github.com/toon-format/spec) output by default.
 
@@ -206,7 +210,6 @@ printf '%s' $'Intro.\n\n# Demo\n' \
 - [`docs/TESTING.md`](docs/TESTING.md): verification and Markdown coverage matrix
 - [`docs/USAGE.md`](docs/USAGE.md): task-oriented CLI guide and sparse-TOON walkthrough
 - [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md): reproducible token/byte methodology and results
-- [`docs/superpowers/specs/2026-09-16-toon-world-design.md`](docs/superpowers/specs/2026-09-16-toon-world-design.md): architecture/design
 
 ## Reference
 
