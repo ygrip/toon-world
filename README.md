@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/toon-world-logo.png" alt="toon-world jester logo" width="360" />
+  <img src="assets/toon-world-logo.png" alt="toon-world jester logo" width="192" />
 </p>
 
 <h1 align="center">toon-world</h1>
