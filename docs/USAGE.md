@@ -2,6 +2,26 @@
 
 `toon-world` reads one structured or document input, runs a jq-compatible query, and writes the selected result. TOON is the default output because it is compact; use JSON when another program will consume the result and text for scalar shell output.
 
+## Install
+
+One Python 3 installer handles every supported OS and architecture.
+
+macOS / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ygrip/toon-world/main/scripts/install.py | python3 -
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/ygrip/toon-world/main/scripts/install.py | py -3 -
+```
+
+The installer detects the platform, downloads the matching latest release binary, verifies it against `SHA256SUMS`, and installs it to `~/.local/bin` unless `--install-dir` or `TOON_WORLD_INSTALL_DIR` overrides the destination. Use `--version v0.6.0` or `TOON_WORLD_VERSION=v0.6.0` to pin a release.
+
+Only the installer needs Python 3. The installed `toon-world` binary has no Python or Rust runtime dependency.
+
 ## Start here
 
 ```bash
