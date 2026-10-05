@@ -51,7 +51,7 @@ Build and install from a checkout:
 
 Both installers use an existing Rust toolchain or install it with official rustup, build a release binary, and copy it to the user-local bin directory. They print PATH guidance instead of modifying shell profiles.
 
-Tagged releases also publish standalone executables for Linux (x86_64/aarch64), macOS (Intel/Apple Silicon), and Windows (x86_64/aarch64), plus SHA-256 checksums.
+Tagged releases also publish stripped standalone executables for Linux (x86_64/aarch64), macOS (Intel/Apple Silicon), and Windows (x86_64/aarch64), plus SHA-256 checksums and a byte-size manifest.
 
 ## Quick usage
 
