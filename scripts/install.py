@@ -14,12 +14,13 @@ import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Optional, Tuple
 
 REPOSITORY = "ygrip/toon-world"
 BASE_RELEASE_URL = f"https://github.com/{REPOSITORY}/releases"
 
 
-def detect_asset() -> tuple[str, str]:
+def detect_asset() -> Tuple[str, str]:
     system = platform.system().lower()
     machine = platform.machine().lower()
 
@@ -43,7 +44,7 @@ def detect_asset() -> tuple[str, str]:
     return f"toon-world-{os_name}-{arch}{suffix}", suffix
 
 
-def release_base(version: str | None) -> str:
+def release_base(version: Optional[str]) -> str:
     if not version or version == "latest":
         return f"{BASE_RELEASE_URL}/latest/download"
     normalized = version if version.startswith("v") else f"v{version}"
