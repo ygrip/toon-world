@@ -51,6 +51,8 @@ Build and install from a checkout:
 
 Both installers use an existing Rust toolchain or install it with official rustup, build a release binary, and copy it to the user-local bin directory. They print PATH guidance instead of modifying shell profiles.
 
+Tagged releases also publish standalone executables for Linux (x86_64/aarch64), macOS (Intel/Apple Silicon), and Windows (x86_64/aarch64), plus SHA-256 checksums.
+
 ## Quick usage
 
 ```bash
@@ -60,6 +62,9 @@ toon-world events.jsonl -q '.[] | select(.level == "warn") | .message' --to text
 
 # Ask for byte reduction statistics on stderr.
 toon-world users.json --stats
+
+# Preserve input unchanged when parsing fails.
+printf '%s' 'plain text, not JSON' | toon-world --fallback
 
 # Experimental: flatten sparse object rows into compact sparse-TOON.
 toon-world records.json --compact > records.stoon
