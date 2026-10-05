@@ -4,23 +4,35 @@
 
 ## Install
 
-One Python 3 installer handles every supported OS and architecture.
+Use the native installer for the current shell.
 
 macOS / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ygrip/toon-world/main/scripts/install.py | python3 -
+curl -fsSL https://raw.githubusercontent.com/ygrip/toon-world/main/scripts/install.sh | sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/ygrip/toon-world/main/scripts/install.py | py -3 -
+irm https://raw.githubusercontent.com/ygrip/toon-world/main/scripts/install.ps1 | iex
 ```
 
-The installer detects the platform, downloads the matching latest release binary, verifies it against `SHA256SUMS`, and installs it to `~/.local/bin` unless `--install-dir` or `TOON_WORLD_INSTALL_DIR` overrides the destination. Use `--version v0.6.0` or `TOON_WORLD_VERSION=v0.6.0` to pin a release.
+Both installers detect the machine architecture, download the matching latest release binary, verify it against `SHA256SUMS`, and install it to `~/.local/bin` unless overridden.
 
-Only the installer needs Python 3. The installed `toon-world` binary has no Python or Rust runtime dependency.
+Pin a version or install directory:
+
+```bash
+sh scripts/install.sh --version v0.6.0
+sh scripts/install.sh --install-dir ~/.local/bin
+```
+
+```powershell
+.\scripts\install.ps1 -Version v0.6.0
+.\scripts\install.ps1 -InstallDir "$HOME\.local\bin"
+```
+
+`TOON_WORLD_VERSION` and `TOON_WORLD_INSTALL_DIR` provide equivalent environment overrides. No Rust runtime or toolchain is required after installation.
 
 ## Start here
 
