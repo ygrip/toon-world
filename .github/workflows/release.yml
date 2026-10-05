@@ -90,10 +90,9 @@ jobs:
       - name: Upload release asset
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.asset }}
           path: dist/${{ matrix.asset }}
           if-no-files-found: error
-          compression-level: 0
+          archive: false
           retention-days: 1
 
   release:
