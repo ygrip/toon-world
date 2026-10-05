@@ -42,6 +42,10 @@ pub struct Args {
     #[arg(long, value_enum)]
     pub from: Option<InputFormat>,
 
+    /// Return the original input unchanged when parsing fails.
+    #[arg(long)]
+    pub fallback: bool,
+
     /// Suppress non-fatal warnings.
     #[arg(long, conflicts_with = "warnings_as_errors")]
     pub quiet: bool,
