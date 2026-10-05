@@ -214,6 +214,31 @@ fn raw_data_supports_full_query_pipeline() {
 }
 
 #[test]
+fn fallback_returns_malformed_input_unchanged() {
+    let input = "not json\nstill raw";
+    let output = run_stdin(
+        &["--fallback", "-q", ".name", "--to", "json"],
+        input,
+    );
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, input.as_bytes());
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn fallback_does_not_change_valid_input_behavior() {
+    let output = run_stdin(
+        &["--fallback", "-q", ".name", "--to", "text"],
+        r#"{"name":"Ada"}"#,
+    );
+
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "Ada\n");
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
 fn malformed_raw_data_reports_json_parse_error() {
     let output = Command::cargo_bin("toon-world")
         .unwrap()
