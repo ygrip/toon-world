@@ -2,6 +2,8 @@ name: Release binaries
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
@@ -12,7 +14,33 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  tag:
+    name: Create release tag
+    if: github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'release:')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Create version tag
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+          test -n "$version"
+          tag="v$version"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists." >&2
+            exit 1
+          fi
+          git tag "$tag" "$GITHUB_SHA"
+          git push origin "refs/tags/$tag"
+
   build:
+    if: startsWith(github.ref, 'refs/tags/v')
     name: Build ${{ matrix.asset }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
