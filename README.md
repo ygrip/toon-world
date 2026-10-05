@@ -39,17 +39,37 @@ HTML ───┘
 
 ## Installation
 
-Build and install from a checkout:
+Use the native installer for your shell. Both installers detect the CPU architecture automatically, download the matching standalone binary from the latest GitHub Release, verify it against `SHA256SUMS`, and install it to `~/.local/bin` by default.
+
+macOS / Linux:
 
 ```bash
-# macOS / Linux
-./scripts/install.sh
-
-# Windows PowerShell
-.\scripts\install.ps1
+curl -fsSL https://raw.githubusercontent.com/ygrip/toon-world/main/scripts/install.sh | sh
 ```
 
-Both installers use an existing Rust toolchain or install it with official rustup, build a release binary, and copy it to the user-local bin directory. They print PATH guidance instead of modifying shell profiles.
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/ygrip/toon-world/main/scripts/install.ps1 | iex
+```
+
+Install a specific release or destination:
+
+```bash
+sh scripts/install.sh --version v0.6.0
+sh scripts/install.sh --install-dir ~/.local/bin
+```
+
+```powershell
+.\scripts\install.ps1 -Version v0.6.0
+.\scripts\install.ps1 -InstallDir "$HOME\.local\bin"
+```
+
+You can also set `TOON_WORLD_VERSION` and `TOON_WORLD_INSTALL_DIR`. The installers print PATH guidance but do not modify shell profiles.
+
+No Rust toolchain is required for installation. The installed `toon-world` executable is standalone.
+
+Tagged releases publish stripped standalone executables for Linux (x86_64/aarch64), macOS (Intel/Apple Silicon), and Windows (x86_64/aarch64), plus SHA-256 checksums and a byte-size manifest.
 
 ## Quick usage
 
@@ -60,6 +80,9 @@ toon-world events.jsonl -q '.[] | select(.level == "warn") | .message' --to text
 
 # Ask for byte reduction statistics on stderr.
 toon-world users.json --stats
+
+# Preserve input unchanged when parsing fails.
+printf '%s' 'plain text, not JSON' | toon-world --fallback
 
 # Experimental: flatten sparse object rows into compact sparse-TOON.
 toon-world records.json --compact > records.stoon

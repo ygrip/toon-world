@@ -2,6 +2,38 @@
 
 `toon-world` reads one structured or document input, runs a jq-compatible query, and writes the selected result. TOON is the default output because it is compact; use JSON when another program will consume the result and text for scalar shell output.
 
+## Install
+
+Use the native installer for the current shell.
+
+macOS / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ygrip/toon-world/main/scripts/install.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/ygrip/toon-world/main/scripts/install.ps1 | iex
+```
+
+Both installers detect the machine architecture, download the matching latest release binary, verify it against `SHA256SUMS`, and install it to `~/.local/bin` unless overridden.
+
+Pin a version or install directory:
+
+```bash
+sh scripts/install.sh --version v0.6.0
+sh scripts/install.sh --install-dir ~/.local/bin
+```
+
+```powershell
+.\scripts\install.ps1 -Version v0.6.0
+.\scripts\install.ps1 -InstallDir "$HOME\.local\bin"
+```
+
+`TOON_WORLD_VERSION` and `TOON_WORLD_INSTALL_DIR` provide equivalent environment overrides. No Rust runtime or toolchain is required after installation.
+
 ## Start here
 
 ```bash
@@ -40,6 +72,15 @@ toon-world --from yaml --data $'service:\n  replicas: 3' -q '.service.replicas' 
 ```
 
 Supported extensions are JSON, `.ndjson`/`.jsonl`, CSV, YAML, TOML, XML, TOON, Markdown, and HTML. An unknown extension falls back to JSON with a warning; pass `--quiet` to suppress it or `--warnings-as-errors` to fail instead.
+
+Use `--fallback` when toon-world sits in a best-effort pipeline and unparseable input must be preserved. If parsing fails, toon-world writes the original input bytes unchanged, skips the query/output pipeline, and exits successfully:
+
+```bash
+printf '%s' 'plain text, not JSON' | toon-world --fallback
+# plain text, not JSON
+```
+
+Without `--fallback`, parse failures remain errors and exit non-zero.
 
 ## Pick an output
 
