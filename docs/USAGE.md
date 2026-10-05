@@ -41,6 +41,15 @@ toon-world --from yaml --data $'service:\n  replicas: 3' -q '.service.replicas' 
 
 Supported extensions are JSON, `.ndjson`/`.jsonl`, CSV, YAML, TOML, XML, TOON, Markdown, and HTML. An unknown extension falls back to JSON with a warning; pass `--quiet` to suppress it or `--warnings-as-errors` to fail instead.
 
+Use `--fallback` when toon-world sits in a best-effort pipeline and unparseable input must be preserved. If parsing fails, toon-world writes the original input bytes unchanged, skips the query/output pipeline, and exits successfully:
+
+```bash
+printf '%s' 'plain text, not JSON' | toon-world --fallback
+# plain text, not JSON
+```
+
+Without `--fallback`, parse failures remain errors and exit non-zero.
+
 ## Pick an output
 
 | Need | Command | Result |
