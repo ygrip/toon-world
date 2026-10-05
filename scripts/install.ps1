@@ -1,10 +1,10 @@
-$ErrorActionPreference = 'Stop'
-Set-StrictMode -Version Latest
-
 param(
     [string]$Version = $(if ($env:TOON_WORLD_VERSION) { $env:TOON_WORLD_VERSION } else { 'latest' }),
     [string]$InstallDir = $(if ($env:TOON_WORLD_INSTALL_DIR) { $env:TOON_WORLD_INSTALL_DIR } else { Join-Path $HOME '.local\bin' })
 )
+
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
 $repo = 'ygrip/toon-world'
 $baseReleaseUrl = "https://github.com/$repo/releases"
