@@ -17,31 +17,52 @@ pub struct ReadResult {
     pub byte_len: usize,
 }
 
+pub struct FallbackResult {
+    pub bytes: Vec<u8>,
+    pub warnings: Vec<Warning>,
+}
+
+pub enum ReadOutcome {
+    Parsed(ReadResult),
+    Fallback(FallbackResult),
+}
+
 pub fn read(
     path: Option<&Path>,
     explicit_format: Option<InputFormat>,
     data: Option<&str>,
     semantic: bool,
 ) -> Result<ReadResult> {
+    match read_with_fallback(path, explicit_format, data, semantic, false)? {
+        ReadOutcome::Parsed(result) => Ok(result),
+        ReadOutcome::Fallback(_) => unreachable!("fallback is disabled"),
+    }
+}
+
+pub fn read_with_fallback(
+    path: Option<&Path>,
+    explicit_format: Option<InputFormat>,
+    data: Option<&str>,
+    semantic: bool,
+    fallback: bool,
+) -> Result<ReadOutcome> {
     let (format, warnings) = resolve_format(path, explicit_format);
-    let (value, byte_len) = if let Some(data) = data {
-        (
-            parse_bytes_with_options(data.as_bytes(), format, semantic)?,
-            data.len(),
-        )
+    let bytes = if let Some(data) = data {
+        data.as_bytes().to_vec()
     } else {
-        let bytes = read_bytes(path)?;
-        let byte_len = bytes.len();
-        (
-            parse_bytes_with_options(&bytes, format, semantic)?,
-            byte_len,
-        )
+        read_bytes(path)?
     };
-    Ok(ReadResult {
-        value,
-        warnings,
-        byte_len,
-    })
+    let byte_len = bytes.len();
+
+    match parse_bytes_with_options(&bytes, format, semantic) {
+        Ok(value) => Ok(ReadOutcome::Parsed(ReadResult {
+            value,
+            warnings,
+            byte_len,
+        })),
+        Err(_) if fallback => Ok(ReadOutcome::Fallback(FallbackResult { bytes, warnings })),
+        Err(error) => Err(error),
+    }
 }
 
 fn resolve_format(
